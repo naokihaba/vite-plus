@@ -18,6 +18,17 @@ use crate::{
     payload::EncodedPayload,
 };
 
+/// Handles exec command resolution and injection
+///
+/// Resolves the program path and prepares the command for execution with
+/// appropriate environment variables and hooks.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Program resolution fails (see [`Exec::resolve`] error variants, such as `ENOENT` (file not found) or `EACCES` (permission denied))
+/// - Environment variable operations fail (e.g., `ensure_env` may return `EINVAL` if an existing value conflicts)
+/// - Platform-specific errors from `os_specific::handle_exec`
 pub fn handle_exec(
     command: &mut Exec,
     config: ExecResolveConfig,
