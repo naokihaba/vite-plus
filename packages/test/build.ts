@@ -205,11 +205,15 @@ await patchBrowserProviderLocators();
 
 // Step 9: Post-processing
 await patchVendorPaths();
+await patchVitestCoreResolver();
 await createBrowserCompatShim();
 await createModuleRunnerStub();
 await createNodeEntry();
 await copyBrowserClientFiles();
 await createBrowserEntryFiles();
+await patchModuleAugmentations();
+await patchChaiTypeReference();
+await patchMockerHoistedModule();
 const pluginExports = await createPluginExports();
 await mergePackageJson(pluginExports);
 await validateExternalDeps();
@@ -283,9 +287,17 @@ async function mergePackageJson(pluginExports: Array<{ exportPath: string; shimF
     destPkg.exports['./client'] = {
       default: './dist/client.js',
     };
+    // Point to @vitest/browser/context.js so that tests and init scripts share the same module
+    // This is critical: the init script (locators.js) calls page.extend() on this module,
+    // and tests must use the SAME module instance to see the extended methods
     destPkg.exports['./context'] = {
       types: './browser/context.d.ts',
-      default: './dist/context.js',
+      default: './dist/@vitest/browser/context.js',
+    };
+    // Also export ./browser/context for users importing @voidzero-dev/vite-plus/test/browser/context
+    destPkg.exports['./browser/context'] = {
+      types: './browser/context.d.ts',
+      default: './dist/@vitest/browser/context.js',
     };
     destPkg.exports['./locators'] = {
       default: './dist/locators.js',
@@ -314,6 +326,21 @@ async function mergePackageJson(pluginExports: Array<{ exportPath: string; shimF
     // Add @vitest/browser-preview compatible export
     // Users can import { preview } from 'vitest/browser-preview'
     destPkg.exports['./browser-preview'] = {
+      types: './dist/@vitest/browser-preview/index.d.ts',
+      default: './dist/@vitest/browser-preview/index.js',
+    };
+
+    // Add browser/providers/* alias exports for compatibility
+    // Some vitest examples use the nested path format
+    destPkg.exports['./browser/providers/playwright'] = {
+      types: './dist/@vitest/browser-playwright/index.d.ts',
+      default: './dist/@vitest/browser-playwright/index.js',
+    };
+    destPkg.exports['./browser/providers/webdriverio'] = {
+      types: './dist/@vitest/browser-webdriverio/index.d.ts',
+      default: './dist/@vitest/browser-webdriverio/index.js',
+    };
+    destPkg.exports['./browser/providers/preview'] = {
       types: './dist/@vitest/browser-preview/index.d.ts',
       default: './dist/@vitest/browser-preview/index.js',
     };
@@ -1078,6 +1105,66 @@ async function patchVendorPaths() {
 }
 
 /**
+ * Patch VitestCoreResolver to resolve @voidzero-dev/vite-plus/test directly.
+ *
+ * Problem: CLI's `export * from '@voidzero-dev/vite-plus-test'` creates a re-export
+ * chain that breaks module identity in Vite's SSR transform. expect.extend()
+ * mutations aren't visible through the re-export.
+ *
+ * Fix: Make VitestCoreResolver resolve both @voidzero-dev/vite-plus/test and
+ * @voidzero-dev/vite-plus-test directly to dist/index.js, bypassing re-exports.
+ */
+async function patchVitestCoreResolver() {
+  console.log('\nPatching VitestCoreResolver for CLI package alias...');
+
+  let cliApiChunk: string | undefined;
+  for await (const chunk of fsGlob(join(distDir, 'chunks/cli-api.*.js'))) {
+    cliApiChunk = chunk;
+    break;
+  }
+
+  if (!cliApiChunk) {
+    throw new Error('cli-api chunk not found');
+  }
+  let content = await readFile(cliApiChunk, 'utf8');
+
+  // Find the VitestCoreResolver resolveId function and add our package aliases
+  const oldPattern = `async resolveId(id) {
+      if (id === "vitest") return resolve(distDir, "index.js");
+      if (id.startsWith("@vitest/") || id.startsWith("vitest/"))`;
+
+  const newCode = `async resolveId(id) {
+      if (id === "vitest") return resolve(distDir, "index.js");
+      // Resolve CLI test path and test package directly to dist/index.js
+      // This bypasses the re-export chain and ensures module identity is preserved
+      if (id === "@voidzero-dev/vite-plus/test" || id === "@voidzero-dev/vite-plus-test") {
+        return resolve(distDir, "index.js");
+      }
+      // Handle subpaths: @voidzero-dev/vite-plus/test/* -> vitest/*
+      if (id.startsWith("@voidzero-dev/vite-plus/test/")) {
+        const subpath = id.slice("@voidzero-dev/vite-plus/test/".length);
+        return this.resolve("vitest/" + subpath, join(ctx.config.root, "index.html"), { skipSelf: true });
+      }
+      // Handle subpaths: @voidzero-dev/vite-plus-test/* -> vitest/*
+      if (id.startsWith("@voidzero-dev/vite-plus-test/")) {
+        const subpath = id.slice("@voidzero-dev/vite-plus-test/".length);
+        return this.resolve("vitest/" + subpath, join(ctx.config.root, "index.html"), { skipSelf: true });
+      }
+      if (id.startsWith("@vitest/") || id.startsWith("vitest/"))`;
+
+  if (!content.includes(oldPattern)) {
+    throw new Error(
+      'Could not find VitestCoreResolver pattern to patch. ' +
+        'This likely means vitest code has changed and the patch needs to be updated.',
+    );
+  }
+
+  content = content.replace(oldPattern, newCode);
+  await writeFile(cliApiChunk, content);
+  console.log('  Patched VitestCoreResolver to resolve @voidzero-dev/vite-plus/test directly');
+}
+
+/**
  * Convert tabs to spaces in all JS files in dist/ for consistent formatting.
  * This allows our patching code to use space-based patterns instead of tabs.
  */
@@ -1263,17 +1350,36 @@ async function patchVitestBrowserPackage() {
   // Pattern: const exclude = ["vitest", ...
   const excludePattern = /(const exclude = \[)(\n?\s*"vitest",)/;
   // Exclude packages that:
-  // - @vitest/browser: needs our resolveId plugin
-  // - vite: Node.js only
-  // - @voidzero-dev/vite-plus-core: our Node.js core package
-  // - @voidzero-dev/vite-plus-core/module-runner: pulled by index.js -> evaluatedModules
-  // - lightningcss: has native bindings
-  // - @tailwindcss/oxide: has native bindings
-  // - tailwindcss: pulls in @tailwindcss/oxide
-  // Also exclude @vitest/ui (optional peer dependency) and its subpath
-  // Also exclude @vitest/mocker/node which imports @voidzero-dev/vite-plus-core
-  const excludeReplacement =
-    '$1\n          "@vitest/browser",\n          "@vitest/ui",\n          "@vitest/ui/reporter",\n          "@vitest/mocker/node",\n          "vite",\n          "@voidzero-dev/vite-plus-core",\n          "@voidzero-dev/vite-plus-core/module-runner",\n          "lightningcss",\n          "@tailwindcss/oxide",\n          "tailwindcss",$2';
+  // Packages to exclude from Vite's dependency pre-bundling (optimizeDeps.exclude)
+  const packagesToExclude = [
+    // @vitest packages that need our resolveId plugin
+    '@vitest/browser',
+    '@vitest/ui',
+    '@vitest/ui/reporter',
+    '@vitest/mocker/node', // imports @voidzero-dev/vite-plus-core
+
+    // Our package aliases - preserve module identity with init scripts
+    // This ensures both init scripts (loaded via /@fs/) and tests use the same page singleton
+    '@voidzero-dev/vite-plus-test',
+    '@voidzero-dev/vite-plus-test/browser',
+    '@voidzero-dev/vite-plus-test/browser/context',
+    '@voidzero-dev/vite-plus/test',
+    '@voidzero-dev/vite-plus/test/browser',
+    '@voidzero-dev/vite-plus/test/browser/context',
+
+    // Node.js only packages
+    'vite',
+    '@voidzero-dev/vite-plus-core',
+    '@voidzero-dev/vite-plus-core/module-runner',
+
+    // Native bindings
+    'lightningcss',
+    '@tailwindcss/oxide',
+    'tailwindcss', // pulls in @tailwindcss/oxide
+  ];
+
+  const excludeListStr = packagesToExclude.map((pkg) => `"${pkg}"`).join(',\n          ');
+  const excludeReplacement = `$1\n          ${excludeListStr},$2`;
   if (excludePattern.test(content)) {
     content = content.replace(excludePattern, excludeReplacement);
     console.log('  Patched exclude list with native deps');
@@ -1751,6 +1857,131 @@ export * from '../dist/@vitest/browser/context.d.ts'
   const destContextDts = join(browserDir, 'context.d.ts');
   await writeFile(destContextDts, contextDtsContent, 'utf-8');
   console.log('  Created browser/context.d.ts');
+}
+
+/**
+ * Patch module augmentations in global.d.*.d.ts files to use relative paths.
+ *
+ * The original vitest types use module augmentation like:
+ *   declare module "@vitest/expect" { interface Assertion<T> { toMatchSnapshot: ... } }
+ *
+ * Since we bundle @vitest/* packages inside dist/@vitest/*, the bare specifier
+ * "@vitest/expect" doesn't exist as a package for consumers. This breaks the
+ * module augmentation - TypeScript can't find @vitest/expect to augment.
+ *
+ * The fix: Change module augmentation to use relative paths that TypeScript CAN resolve:
+ *   declare module "../@vitest/expect/index.js" { ... }
+ *
+ * This makes TypeScript augment the same module that our index.d.ts imports from,
+ * so the augmented properties (toMatchSnapshot, toMatchInlineSnapshot, etc.)
+ * appear on the Assertion type that consumers import.
+ */
+async function patchModuleAugmentations() {
+  console.log('\nPatching module augmentations in global.d.*.d.ts files...');
+
+  const chunksDir = join(distDir, 'chunks');
+  const globalDtsFiles: string[] = [];
+
+  // Find all global.d.*.d.ts files
+  for await (const file of fsGlob(join(chunksDir, 'global.d.*.d.ts'))) {
+    globalDtsFiles.push(file);
+  }
+
+  if (globalDtsFiles.length === 0) {
+    console.log('  No global.d.*.d.ts files found');
+    return;
+  }
+
+  // Module augmentation mappings: bare specifier -> relative path from chunks/
+  const augmentationMappings: Record<string, string> = {
+    '@vitest/expect': '../@vitest/expect/index.js',
+    '@vitest/runner': '../@vitest/runner/index.js',
+  };
+
+  for (const file of globalDtsFiles) {
+    let content = await readFile(file, 'utf-8');
+    let modified = false;
+
+    for (const [bareSpecifier, relativePath] of Object.entries(augmentationMappings)) {
+      const oldPattern = `declare module "${bareSpecifier}"`;
+      const newPattern = `declare module "${relativePath}"`;
+
+      if (content.includes(oldPattern)) {
+        content = content.replaceAll(oldPattern, newPattern);
+        modified = true;
+        console.log(`  Patched: ${bareSpecifier} -> ${relativePath} in ${basename(file)}`);
+      }
+    }
+
+    if (modified) {
+      await writeFile(file, content, 'utf-8');
+    }
+  }
+}
+
+/**
+ * Add triple-slash reference to @types/chai in @vitest/expect types.
+ *
+ * The @vitest/expect types use the Chai namespace (e.g., Chai.Assertion) which
+ * is defined in @types/chai. Without a reference directive, TypeScript won't
+ * automatically find the Chai types, causing the `not` property and other
+ * chai-specific features to be missing from the Assertion interface.
+ */
+async function patchChaiTypeReference() {
+  console.log('\nAdding @types/chai reference to @vitest/expect types...');
+
+  const expectIndexDts = join(distDir, '@vitest/expect/index.d.ts');
+
+  let content = await readFile(expectIndexDts, 'utf-8');
+
+  // Check if reference already exists
+  if (content.includes('/// <reference types="chai"')) {
+    console.log('  Reference already exists, skipping');
+    return;
+  }
+
+  // Add triple-slash reference at the top
+  content = `/// <reference types="chai" />\n${content}`;
+
+  await writeFile(expectIndexDts, content, 'utf-8');
+  console.log('  Added /// <reference types="chai" /> to @vitest/expect/index.d.ts');
+}
+
+/**
+ * Patch the vitest mocker to recognize @voidzero-dev packages as valid sources for vi/vitest.
+ *
+ * The mocker's hoistMocks function checks if `vi` is imported from the 'vitest' module.
+ * When users import from '@voidzero-dev/vite-plus/test' instead, the mocker doesn't
+ * recognize it and throws "There are some problems in resolving the mocks API".
+ *
+ * This patch modifies the equality check to also accept our package names:
+ * - @voidzero-dev/vite-plus/test
+ * - @voidzero-dev/vite-plus-test
+ */
+async function patchMockerHoistedModule() {
+  console.log('\nPatching vitest mocker to recognize @voidzero-dev packages...');
+
+  const mockerPath = join(distDir, '@vitest/mocker/node.js');
+  let content = await readFile(mockerPath, 'utf-8');
+
+  // Find and replace the hoistedModule check
+  // Original: if (hoistedModule === source) {
+  // New: if (hoistedModule === source || source === "@voidzero-dev/vite-plus/test" || source === "@voidzero-dev/vite-plus-test") {
+  const originalCheck = 'if (hoistedModule === source) {';
+  const newCheck =
+    'if (hoistedModule === source || source === "@voidzero-dev/vite-plus/test" || source === "@voidzero-dev/vite-plus-test") {';
+
+  if (!content.includes(originalCheck)) {
+    throw new Error(
+      'Could not find hoistedModule check to patch in @vitest/mocker. ' +
+        'This likely means vitest code has changed and the patch needs to be updated.',
+    );
+  }
+
+  content = content.replace(originalCheck, newCheck);
+
+  await writeFile(mockerPath, content, 'utf-8');
+  console.log('  Patched hoistMocks to recognize @voidzero-dev packages');
 }
 
 /**

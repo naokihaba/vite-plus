@@ -155,6 +155,10 @@
       "types": "./dist/test/context.d.ts",
       "default": "./dist/test/context.js"
     },
+    "./test/browser/context": {
+      "types": "./dist/test/browser/context.d.ts",
+      "default": "./dist/test/browser/context.js"
+    },
     "./test/locators": {
       "default": "./dist/test/locators.js"
     },
@@ -175,6 +179,18 @@
     "./test/browser-preview": {
       "types": "./dist/test/browser-preview.d.ts",
       "default": "./dist/test/browser-preview.js"
+    },
+    "./test/browser/providers/playwright": {
+      "types": "./dist/test/browser/providers/playwright.d.ts",
+      "default": "./dist/test/browser/providers/playwright.js"
+    },
+    "./test/browser/providers/webdriverio": {
+      "types": "./dist/test/browser/providers/webdriverio.d.ts",
+      "default": "./dist/test/browser/providers/webdriverio.js"
+    },
+    "./test/browser/providers/preview": {
+      "types": "./dist/test/browser/providers/preview.d.ts",
+      "default": "./dist/test/browser/providers/preview.js"
     },
     "./test/plugins/runner": {
       "default": "./dist/test/plugins/runner.js"

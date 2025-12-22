@@ -171,6 +171,9 @@ catalogs:
     picomatch:
       specifier: ^4.0.2
       version: 4.0.3
+    playwright:
+      specifier: ^1.57.0
+      version: 1.57.0
     react:
       specifier: ^19.1.0
       version: 19.2.0
@@ -292,6 +295,9 @@ importers:
       oxlint:
         specifier: 'catalog:'
         version: 1.31.0(oxlint-tsgolint@0.8.3)
+      playwright:
+        specifier: 'catalog:'
+        version: 1.57.0
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -530,6 +536,9 @@ importers:
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
+      '@types/chai':
+        specifier: ^5.2.2
+        version: 5.2.3
       '@types/node':
         specifier: ^20.0.0 || ^22.0.0 || >=24.0.0
         version: 22.19.1
