@@ -60,6 +60,11 @@ export async function executeRemoteTemplate(
     prompts.log.info(`  ${gray('•')} Make sure the GitHub repository exists`);
     prompts.log.info(`  ${gray('•')} Check your internet connection`);
     prompts.log.info(`  ${gray('•')} Repository might be private (requires authentication)`);
+  } else if (!isGitHubTemplate && exitCode !== 0) {
+    prompts.log.info(yellow('\nTroubleshooting:'));
+    prompts.log.info(`  ${gray('•')} Template not found on npm. Run ${yellow('vp create --list')} to see available templates.`,);
+    prompts.log.info(`  ${gray('•')} Built-in templates: ${yellow('vite:monorepo')}, ${yellow('vite:application')}, ${yellow('vite:library')}, ${yellow('vite:generator')}`);
+    prompts.log.info(`  ${gray('•')} Run ${yellow('vp create')} for interactive mode`);
   }
   return result;
 }
