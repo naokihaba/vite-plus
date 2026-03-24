@@ -45,6 +45,7 @@ export async function executeBuiltinTemplate(
       options?.silent ?? false,
     );
     if (result.exitCode !== 0) {
+      prompts.log.error(`Failed to scaffold library template: ${result.exitCode}`);
       return { ...result, projectDir: templateInfo.targetDir };
     }
     const fullPath = path.join(workspaceInfo.rootDir, templateInfo.targetDir);
@@ -71,6 +72,7 @@ export async function executeBuiltinTemplate(
     options?.silent ?? false,
   );
   if (result.exitCode !== 0) {
+    prompts.log.error(`Failed to scaffold template: ${result.exitCode}`);
     return { ...result, projectDir: templateInfo.targetDir };
   }
   const fullPath = path.join(workspaceInfo.rootDir, templateInfo.targetDir);
