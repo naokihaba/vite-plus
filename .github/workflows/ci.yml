@@ -99,15 +99,49 @@ jobs:
           cache-key: test
           target-dir: ${{ runner.os == 'Windows' && format('{0}/target', env.DEV_DRIVE) || '' }}
 
-      - run: rustup target add x86_64-unknown-linux-musl
-        if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' }}
-
       - run: cargo check --all-targets --all-features
         env:
           RUSTFLAGS: '-D warnings --cfg tokio_unstable' # also update .cargo/config.toml
 
       # Test all crates/* packages. New crates are automatically included.
       # Also test vite-plus-cli (lives outside crates/) to catch type sync issues.
+      - run: cargo test $(for d in crates/*/; do echo -n "-p $(basename $d) "; done) -p vite-plus-cli
+        env:
+          RUST_MIN_STACK: 8388608
+
+  test-musl:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.code-changed == 'true'
+    name: Test (Linux x64 musl)
+    runs-on: namespace-profile-linux-x64-default
+    container:
+      image: node:22-alpine3.21
+    env:
+      # GitHub Actions sets HOME=/github/home in containers, but the euid home is /root.
+      # Pin Rust tooling paths to avoid $HOME mismatch issues.
+      CARGO_HOME: /root/.cargo
+      RUSTUP_HOME: /root/.rustup
+    steps:
+      - name: Install Alpine dependencies
+        shell: sh {0}
+        run: apk add --no-cache bash curl git musl-dev gcc g++ python3 cmake make
+
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: ./.github/actions/clone
+
+      - name: Install rustup
+        run: |
+          # GitHub Actions sets HOME=/github/home in containers, but rustup expects euid home (/root)
+          export HOME=/root
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none
+          echo "/root/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      # Test all crates/* packages. New crates are automatically included.
+      # Also test vite-plus-cli (lives outside crates/) to catch type sync issues.
+      # Skip separate cargo check — cargo test already compiles everything.
       - run: cargo test $(for d in crates/*/; do echo -n "-p $(basename $d) "; done) -p vite-plus-cli
         env:
           RUST_MIN_STACK: 8388608
@@ -146,48 +180,6 @@ jobs:
       - name: Deduplicate dependencies
         run: pnpm dedupe --check
 
-  run:
-    name: Run task
-    runs-on: namespace-profile-linux-x64-default
-    needs:
-      - download-previous-rolldown-binaries
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-      - uses: ./.github/actions/clone
-
-      - uses: oxc-project/setup-rust@d286d43bc1f606abbd98096666ff8be68c8d5f57 # v1.0.0
-        with:
-          save-cache: ${{ github.ref_name == 'main' }}
-          cache-key: run
-
-      - uses: oxc-project/setup-node@fdbf0dfd334c4e6d56ceeb77d91c76339c2a0885 # v1.0.4
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: rolldown-binaries
-          path: ./rolldown/packages/rolldown/src
-          merge-multiple: true
-
-      - name: Build with upstream
-        uses: ./.github/actions/build-upstream
-        with:
-          target: x86_64-unknown-linux-gnu
-
-      - name: Install Global CLI vp
-        run: |
-          pnpm bootstrap-cli:ci
-          echo "$HOME/.vite-plus/bin" >> $GITHUB_PATH
-
-      - name: Print help for built-in commands
-        run: |
-          which vp
-          vp -h
-          vp run -h
-          vp lint -h
-          vp test -h
-          vp build -h
-          vp fmt -h
-
   cli-e2e-test:
     name: CLI E2E test
     needs:
@@ -197,8 +189,11 @@ jobs:
       matrix:
         include:
           - os: namespace-profile-linux-x64-default
+            target: x86_64-unknown-linux-gnu
           - os: namespace-profile-mac-default
+            target: aarch64-apple-darwin
           - os: windows-latest
+            target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -217,7 +212,7 @@ jobs:
       - uses: oxc-project/setup-rust@d286d43bc1f606abbd98096666ff8be68c8d5f57 # v1.0.0
         with:
           save-cache: ${{ github.ref_name == 'main' }}
-          cache-key: cli-e2e-test
+          cache-key: cli-e2e-test-${{ matrix.target }}
           target-dir: ${{ runner.os == 'Windows' && format('{0}/target', env.DEV_DRIVE) || '' }}
 
       - uses: oxc-project/setup-node@fdbf0dfd334c4e6d56ceeb77d91c76339c2a0885 # v1.0.4
@@ -234,10 +229,10 @@ jobs:
       - name: Build with upstream
         uses: ./.github/actions/build-upstream
         with:
-          target: ${{ matrix.os == 'namespace-profile-linux-x64-default' && 'x86_64-unknown-linux-gnu' ||  matrix.os == 'windows-latest' && 'x86_64-pc-windows-msvc' || 'aarch64-apple-darwin' }}
+          target: ${{ matrix.target }}
 
       - name: Check TypeScript types
-        if: ${{ matrix.os == 'namespace-profile-linux-x64-default' }}
+        if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' }}
         run: pnpm tsgo
 
       - name: Install Global CLI vp
@@ -395,7 +390,7 @@ jobs:
       - name: Run CLI snapshot tests
         run: |
           RUST_BACKTRACE=1 pnpm test
-          if ! git diff --exit-code; then
+          if ! git diff --quiet; then
             echo "::error::Snapshot diff detected. Run 'pnpm -F vite-plus snap-test' locally and commit the updated snap.txt files."
             git diff --stat
             git diff
@@ -577,6 +572,87 @@ jobs:
           pnpm bootstrap-cli:ci
           vp --version
 
+  cli-e2e-test-musl:
+    name: CLI E2E test (Linux x64 musl)
+    needs:
+      - download-previous-rolldown-binaries
+    runs-on: namespace-profile-linux-x64-default
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: ./.github/actions/clone
+
+      - uses: oxc-project/setup-rust@d286d43bc1f606abbd98096666ff8be68c8d5f57 # v1.0.0
+        with:
+          save-cache: ${{ github.ref_name == 'main' }}
+          cache-key: cli-e2e-test-musl
+
+      - uses: oxc-project/setup-node@fdbf0dfd334c4e6d56ceeb77d91c76339c2a0885 # v1.0.4
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: rolldown-binaries
+          path: ./rolldown/packages/rolldown/src
+          merge-multiple: true
+
+      # Cross-compile for musl on the glibc host
+      - name: Build with upstream (musl)
+        uses: ./.github/actions/build-upstream
+        with:
+          target: x86_64-unknown-linux-musl
+
+      # Run bootstrap-cli:ci and E2E tests inside an Alpine container where musl is native.
+      # Can't run on the glibc host because NAPI .node files are musl-linked.
+      - name: Run E2E in Alpine container
+        run: |
+          docker run --rm \
+            -e CI=true \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            node:22-alpine3.21 sh -c "
+              apk add --no-cache bash curl ca-certificates git
+
+              # Install pnpm and re-resolve optional dependencies for musl.
+              # The host node_modules has glibc bindings; pnpm store holds both
+              # but we need to re-link the musl variants.
+              corepack enable
+              pnpm install --frozen-lockfile --force
+
+              # Download musl rolldown binding (host downloaded glibc variant)
+              ROLLDOWN_VERSION=\$(node -p \"require('./rolldown/packages/rolldown/package.json').version\")
+              npm pack \"@rolldown/binding-linux-x64-musl@\${ROLLDOWN_VERSION}\"
+              tar -xzf \"rolldown-binding-linux-x64-musl-\${ROLLDOWN_VERSION}.tgz\"
+              cp ./package/rolldown-binding.linux-x64-musl.node ./packages/core/dist/rolldown/shared/
+              cp ./package/rolldown-binding.linux-x64-musl.node ./rolldown/packages/rolldown/dist/shared/
+              rm -rf package *.tgz
+
+              pnpm bootstrap-cli:ci
+              export PATH=\"/root/.vite-plus/bin:\$PATH\"
+
+              vp --version
+              vp -h
+              vp env doctor
+
+              # Verify shims work
+              which node
+              which npm
+              node --version
+
+              # Test global package install
+              vp install -g typescript
+              tsc --version
+              vp uninstall -g typescript
+
+              # Run snap tests
+              git config --global --add safe.directory /workspace
+              RUST_BACKTRACE=1 pnpm test
+              if ! git diff --quiet; then
+                echo '::error::Snapshot diff detected. Run pnpm -F vite-plus snap-test locally and commit the updated snap.txt files.'
+                git diff --stat
+                git diff
+                exit 1
+              fi
+            "
+
   install-e2e-test:
     name: Local CLI `vp install` E2E test
     needs:
@@ -651,9 +727,10 @@ jobs:
     if: always()
     needs:
       - test
+      - test-musl
       - lint
-      - run
       - cli-e2e-test
+      - cli-e2e-test-musl
     steps:
       - run: exit 1
         # Thank you, next https://github.com/vercel/next.js/blob/canary/.github/workflows/build_and_test.yml#L379

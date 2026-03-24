@@ -16,7 +16,12 @@ use crate::{
 };
 
 /// Default Node.js distribution base URL
+#[cfg(not(target_env = "musl"))]
 const DEFAULT_NODE_DIST_URL: &str = "https://nodejs.org/dist";
+
+/// Unofficial builds URL for musl (official nodejs.org only provides glibc binaries)
+#[cfg(target_env = "musl")]
+const DEFAULT_NODE_DIST_URL: &str = "https://unofficial-builds.nodejs.org/download/release";
 
 /// Environment variable to override the Node.js distribution URL
 
@@ -553,6 +558,12 @@ impl JsRuntimeProvider for NodeProvider {
             crate::platform::Arch::X64 => "x64",
             crate::platform::Arch::Arm64 => "arm64",
         };
+        // On musl targets, append "-musl" to match unofficial-builds filename pattern
+        // e.g. "linux-x64-musl" instead of "linux-x64"
+        #[cfg(target_env = "musl")]
+        if platform.os == Os::Linux {
+            return vite_str::format!("{os}-{arch}-musl");
+        }
         vite_str::format!("{os}-{arch}")
     }
 
@@ -616,9 +627,19 @@ mod tests {
     fn test_platform_string() {
         let provider = NodeProvider::new();
 
+        #[cfg(not(target_env = "musl"))]
         let cases = [
             (Platform { os: Os::Linux, arch: Arch::X64 }, "linux-x64"),
             (Platform { os: Os::Linux, arch: Arch::Arm64 }, "linux-arm64"),
+            (Platform { os: Os::Darwin, arch: Arch::X64 }, "darwin-x64"),
+            (Platform { os: Os::Darwin, arch: Arch::Arm64 }, "darwin-arm64"),
+            (Platform { os: Os::Windows, arch: Arch::X64 }, "win-x64"),
+            (Platform { os: Os::Windows, arch: Arch::Arm64 }, "win-arm64"),
+        ];
+        #[cfg(target_env = "musl")]
+        let cases = [
+            (Platform { os: Os::Linux, arch: Arch::X64 }, "linux-x64-musl"),
+            (Platform { os: Os::Linux, arch: Arch::Arm64 }, "linux-arm64-musl"),
             (Platform { os: Os::Darwin, arch: Arch::X64 }, "darwin-x64"),
             (Platform { os: Os::Darwin, arch: Arch::Arm64 }, "darwin-arm64"),
             (Platform { os: Os::Windows, arch: Arch::X64 }, "win-x64"),
@@ -637,19 +658,38 @@ mod tests {
 
         let info = provider.get_download_info("22.13.1", platform);
 
-        assert_eq!(info.archive_filename, "node-v22.13.1-linux-x64.tar.gz");
-        assert_eq!(
-            info.archive_url,
-            "https://nodejs.org/dist/v22.13.1/node-v22.13.1-linux-x64.tar.gz"
-        );
-        assert_eq!(info.archive_format, ArchiveFormat::TarGz);
-        assert_eq!(info.extracted_dir_name, "node-v22.13.1-linux-x64");
-
-        if let HashVerification::ShasumsFile { url } = &info.hash_verification {
-            assert_eq!(url, "https://nodejs.org/dist/v22.13.1/SHASUMS256.txt");
-        } else {
-            panic!("Expected ShasumsFile verification");
+        #[cfg(not(target_env = "musl"))]
+        {
+            assert_eq!(info.archive_filename, "node-v22.13.1-linux-x64.tar.gz");
+            assert_eq!(
+                info.archive_url,
+                "https://nodejs.org/dist/v22.13.1/node-v22.13.1-linux-x64.tar.gz"
+            );
+            assert_eq!(info.extracted_dir_name, "node-v22.13.1-linux-x64");
+            if let HashVerification::ShasumsFile { url } = &info.hash_verification {
+                assert_eq!(url, "https://nodejs.org/dist/v22.13.1/SHASUMS256.txt");
+            } else {
+                panic!("Expected ShasumsFile verification");
+            }
         }
+        #[cfg(target_env = "musl")]
+        {
+            assert_eq!(info.archive_filename, "node-v22.13.1-linux-x64-musl.tar.gz");
+            assert_eq!(
+                info.archive_url,
+                "https://unofficial-builds.nodejs.org/download/release/v22.13.1/node-v22.13.1-linux-x64-musl.tar.gz"
+            );
+            assert_eq!(info.extracted_dir_name, "node-v22.13.1-linux-x64-musl");
+            if let HashVerification::ShasumsFile { url } = &info.hash_verification {
+                assert_eq!(
+                    url,
+                    "https://unofficial-builds.nodejs.org/download/release/v22.13.1/SHASUMS256.txt"
+                );
+            } else {
+                panic!("Expected ShasumsFile verification");
+            }
+        }
+        assert_eq!(info.archive_format, ArchiveFormat::TarGz);
     }
 
     #[test]
@@ -724,7 +764,7 @@ fedcba987654  node-v22.13.1-win-x64.zip";
     #[test]
     fn test_get_dist_url_default() {
         vite_shared::EnvConfig::test_scope(vite_shared::EnvConfig::for_test(), || {
-            assert_eq!(get_dist_url(), "https://nodejs.org/dist");
+            assert_eq!(get_dist_url(), DEFAULT_NODE_DIST_URL);
         });
     }
 
