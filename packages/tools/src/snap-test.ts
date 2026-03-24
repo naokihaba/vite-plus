@@ -204,8 +204,13 @@ interface Command {
   timeout?: number;
 }
 
+interface PlatformFilter {
+  os: string;
+  libc?: string;
+}
+
 interface Steps {
-  ignoredPlatforms?: string[];
+  ignoredPlatforms?: (string | PlatformFilter)[];
   env: Record<string, string>;
   commands: (string | Command)[];
   /**
@@ -221,11 +226,62 @@ interface Steps {
   serial?: boolean;
 }
 
+let _isMusl: boolean | null = null;
+
+function isMusl(): boolean {
+  if (_isMusl === null) {
+    if (process.platform !== 'linux') {
+      _isMusl = false;
+    } else if (typeof process.report?.getReport === 'function') {
+      // Use Node.js process.report API to detect libc type:
+      // - glibcVersionRuntime present → glibc
+      // - shared objects contain "musl" → musl
+      const report = process.report.getReport() as Record<string, any>;
+      if (report.header?.glibcVersionRuntime) {
+        _isMusl = false;
+      } else if (Array.isArray(report.sharedObjects)) {
+        _isMusl = report.sharedObjects.some(
+          (f: string) => f.includes('libc.musl-') || f.includes('ld-musl-'),
+        );
+      } else {
+        _isMusl = false;
+      }
+    } else {
+      _isMusl = false;
+    }
+  }
+  return _isMusl;
+}
+
+function shouldSkipPlatform(ignoredPlatforms: (string | PlatformFilter)[]): boolean {
+  for (const filter of ignoredPlatforms) {
+    if (typeof filter === 'string') {
+      if (filter === process.platform) {
+        return true;
+      }
+    } else {
+      if (filter.os !== process.platform) {
+        continue;
+      }
+      if (filter.libc === undefined) {
+        return true;
+      }
+      if (filter.libc === 'musl' && isMusl()) {
+        return true;
+      }
+      if (filter.libc === 'glibc' && !isMusl()) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 async function runTestCase(name: string, tempTmpDir: string, casesDir: string, binDir?: string) {
   const steps: Steps = JSON.parse(
     await fsPromises.readFile(`${casesDir}/${name}/steps.json`, 'utf-8'),
   );
-  if (steps.ignoredPlatforms !== undefined && steps.ignoredPlatforms.includes(process.platform)) {
+  if (steps.ignoredPlatforms !== undefined && shouldSkipPlatform(steps.ignoredPlatforms)) {
     console.log('%s skipped on platform %s', name, process.platform);
     return;
   }
@@ -245,6 +301,9 @@ async function runTestCase(name: string, tempTmpDir: string, casesDir: string, b
     // Indicate CLI is running in test mode, so that it prints more detailed outputs.
     // Also disables tips for stable snapshots.
     VITE_PLUS_CLI_TEST: '1',
+    // Suppress Node.js runtime warnings (e.g. MODULE_TYPELESS_PACKAGE_JSON)
+    // to keep snap outputs stable across Node.js versions.
+    NODE_NO_WARNINGS: '1',
     NO_COLOR: 'true',
     // set CI=true make sure snap-tests are stable on GitHub Actions
     CI: 'true',

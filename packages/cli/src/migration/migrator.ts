@@ -22,6 +22,7 @@ import {
   VITE_PLUS_NAME,
   VITE_PLUS_OVERRIDE_PACKAGES,
   VITE_PLUS_VERSION,
+  isForceOverrideMode,
 } from '../utils/constants.js';
 import { editJsonFile, isJsonFile, readJsonFile } from '../utils/json.js';
 import { detectPackageMetadata } from '../utils/package.js';
@@ -982,16 +983,30 @@ function rewriteRootWorkspacePackageJson(
         ...VITE_PLUS_OVERRIDE_PACKAGES,
       };
     } else if (packageManager === PackageManager.pnpm) {
-      // pnpm use overrides field at pnpm-workspace.yaml
-      // so we don't need to set overrides field at package.json
-      // remove packages from `resolutions` field and `pnpm.overrides` field if they exist
-      // https://pnpm.io/9.x/package_json#resolutions
-      for (const key of [...Object.keys(VITE_PLUS_OVERRIDE_PACKAGES), ...REMOVE_PACKAGES]) {
-        if (pkg.pnpm?.overrides?.[key]) {
-          delete pkg.pnpm.overrides[key];
-        }
-        if (pkg.resolutions?.[key]) {
-          delete pkg.resolutions[key];
+      if (isForceOverrideMode()) {
+        // In force-override mode, keep overrides in package.json pnpm.overrides
+        // because pnpm ignores pnpm-workspace.yaml overrides when pnpm.overrides
+        // exists in package.json (even with unrelated entries like rollup).
+        pkg.pnpm = {
+          ...pkg.pnpm,
+          overrides: {
+            ...pkg.pnpm?.overrides,
+            ...VITE_PLUS_OVERRIDE_PACKAGES,
+            [VITE_PLUS_NAME]: VITE_PLUS_VERSION,
+          },
+        };
+      } else {
+        // pnpm use overrides field at pnpm-workspace.yaml
+        // so we don't need to set overrides field at package.json
+        // remove packages from `resolutions` field and `pnpm.overrides` field if they exist
+        // https://pnpm.io/9.x/package_json#resolutions
+        for (const key of [...Object.keys(VITE_PLUS_OVERRIDE_PACKAGES), ...REMOVE_PACKAGES]) {
+          if (pkg.pnpm?.overrides?.[key]) {
+            delete pkg.pnpm.overrides[key];
+          }
+          if (pkg.resolutions?.[key]) {
+            delete pkg.resolutions[key];
+          }
         }
       }
       // remove dependency selector from vite, e.g. "vite-plugin-svgr>vite": "npm:vite@7.0.12"
@@ -1495,18 +1510,34 @@ function rewriteAllImports(projectPath: string, silent = false, report?: Migrati
 /**
  * Check if the project has an unsupported husky version (<9.0.0).
  * Uses `semver.coerce` to handle ranges like `^8.0.0` → `8.0.0`.
- * Accepts pre-loaded deps to avoid re-reading package.json when called
- * from contexts that already parsed it.
+ * When the specifier is not coercible (e.g. `"latest"`), falls back to
+ * the installed version in node_modules via `detectPackageMetadata`.
+ * Returns a reason string if hooks migration should be skipped, or null
+ * if husky is absent or compatible.
  */
 function checkUnsupportedHuskyVersion(
+  projectPath: string,
   deps: Record<string, string> | undefined,
   prodDeps: Record<string, string> | undefined,
-): boolean {
+): string | null {
   const huskyVersion = deps?.husky ?? prodDeps?.husky;
   if (!huskyVersion) {
-    return false;
+    return null;
   }
-  return semver.satisfies(semver.coerce(huskyVersion) ?? '0.0.0', '<9.0.0');
+  let coerced = semver.coerce(huskyVersion);
+  if (coerced == null) {
+    const installed = detectPackageMetadata(projectPath, 'husky');
+    if (installed) {
+      coerced = semver.coerce(installed.version);
+    }
+    if (coerced == null) {
+      return `Could not determine husky version from "${huskyVersion}" — please specify a semver-compatible version (e.g., "^9.0.0") and re-run migration.`;
+    }
+  }
+  if (semver.satisfies(coerced, '<9.0.0')) {
+    return 'Detected husky <9.0.0 — please upgrade to husky v9+ first, then re-run migration.';
+  }
+  return null;
 }
 
 const OTHER_HOOK_TOOLS = ['simple-git-hooks', 'lefthook', 'yorkie'] as const;
@@ -1620,8 +1651,9 @@ export function preflightGitHooksSetup(projectPath: string): string | null {
       return `Detected ${tool} — skipping git hooks setup. Please configure git hooks manually.`;
     }
   }
-  if (checkUnsupportedHuskyVersion(deps, prodDeps)) {
-    return 'Detected husky <9.0.0 — please upgrade to husky v9+ first, then re-run migration.';
+  const huskyReason = checkUnsupportedHuskyVersion(projectPath, deps, prodDeps);
+  if (huskyReason) {
+    return huskyReason;
   }
   if (hasUnsupportedLintStagedConfig(projectPath)) {
     return 'Unsupported lint-staged config format — skipping git hooks setup. Please configure git hooks manually.';

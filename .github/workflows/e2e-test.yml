@@ -257,6 +257,38 @@ jobs:
               vp check
               vp pack
               vp test
+          - name: vinext
+            node-version: 24
+            command: |
+              vp run build
+              vp check --fix
+              vp run check
+              vp run test
+          - name: reactive-resume
+            node-version: 24
+            command: |
+              vp fmt
+              vp lint --type-aware
+              vp build
+              vp test
+          - name: yaak
+            node-version: 24
+            command: |
+              vp fmt --ignore-path .oxfmtignore
+              # FIXME: type-aware lint fails with "Invalid tsconfig" without full Rust/wasm bootstrap
+              vp lint || true
+              vp test
+          - name: npmx.dev
+            node-version: 24
+            command: |
+              vp fmt
+              vp run lint
+              vp run test:types
+              vp test --project unit
+          - name: vite-plus-jest-dom-repro
+            node-version: 24
+            command: |
+              vp test run
         exclude:
           # frm-stack uses Docker (testcontainers) which doesn't work the same way on Windows
           - os: windows-latest
@@ -266,6 +298,18 @@ jobs:
           - os: windows-latest
             project:
               name: dify
+          # vinext uses workerd native deps that don't build on Windows
+          - os: windows-latest
+            project:
+              name: vinext
+          # yaak is a Tauri app with Rust/wasm deps
+          - os: windows-latest
+            project:
+              name: yaak
+          # npmx.dev is a Nuxt app, ubuntu-only for now
+          - os: windows-latest
+            project:
+              name: npmx.dev
 
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -309,6 +353,11 @@ jobs:
         run: |
           node $GITHUB_WORKSPACE/ecosystem-ci/patch-project.ts ${{ matrix.project.name }}
           vp install --no-frozen-lockfile
+
+      - name: Verify local tgz packages installed
+        working-directory: ${{ runner.temp }}/vite-plus-ecosystem-ci/${{ matrix.project.name }}${{ matrix.project.directory && format('/{0}', matrix.project.directory) || '' }}
+        shell: bash
+        run: node $GITHUB_WORKSPACE/ecosystem-ci/verify-install.ts
 
       - name: Run vite-plus commands in ${{ matrix.project.name }}
         working-directory: ${{ runner.temp }}/vite-plus-ecosystem-ci/${{ matrix.project.name }}${{ matrix.project.directory && format('/{0}', matrix.project.directory) || '' }}

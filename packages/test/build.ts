@@ -224,6 +224,7 @@ await createBrowserEntryFiles();
 await patchModuleAugmentations();
 await patchChaiTypeReference();
 await patchMockerHoistedModule();
+await patchServerDepsInline();
 const pluginExports = await createPluginExports();
 await mergePackageJson(pluginExports);
 generateLicenseFile({
@@ -1458,8 +1459,16 @@ async function patchVitestBrowserPackage() {
 
   // 1. Inject vitest:vendor-aliases plugin into BrowserPlugin return array
   // This allows imports like @vitest/runner to be resolved to our copied @vitest files
+  // Exclude @vitest/browser/context from vendor-aliases so that BrowserContext
+  // plugin's resolveId can intercept the bare specifier and return the virtual
+  // module (which includes the dynamically generated `server` export).
+  // Without this, vendor-aliases resolves the bare specifier to the static
+  // context.js file (which has no `server`), bypassing BrowserContext entirely.
+  // See: https://github.com/voidzero-dev/vite-plus/issues/1086
+  const VENDOR_ALIASES_EXCLUDE = new Set(['@vitest/browser/context']);
+
   const mappingEntries = Object.entries(VITEST_PACKAGE_TO_PATH)
-    .filter(([pkg]) => pkg.startsWith('@vitest/'))
+    .filter(([pkg]) => pkg.startsWith('@vitest/') && !VENDOR_ALIASES_EXCLUDE.has(pkg))
     .map(([pkg, file]) => `'${pkg}': resolve(packageRoot, '${file}')`)
     .join(',\n      ');
 
@@ -2350,6 +2359,83 @@ async function patchMockerHoistedModule() {
         'This likely means vitest code has changed and the patch needs to be updated.',
     );
   }
+}
+
+/**
+ * Patch vitest's ModuleRunnerTransform plugin to automatically add known
+ * packages that use `expect.extend()` internally to `server.deps.inline`.
+ *
+ * When third-party libraries (e.g., @testing-library/jest-dom) call
+ * `require('vitest').expect.extend(matchers)`, the npm override causes
+ * a separate module instance to be created, so matchers are registered
+ * on a different `chai` instance than the one used by the test runner.
+ *
+ * By inlining these packages via `server.deps.inline`, the Vite module
+ * runner processes them through its transform pipeline, ensuring they
+ * share the same module instance as the test runner.
+ *
+ * See: https://github.com/voidzero-dev/vite-plus/issues/897
+ */
+async function patchServerDepsInline() {
+  console.log('\nPatching server.deps.inline for expect.extend compatibility...');
+
+  let cliApiChunk: string | undefined;
+  for await (const chunk of fsGlob(join(distDir, 'chunks/cli-api.*.js'))) {
+    cliApiChunk = chunk;
+    break;
+  }
+
+  if (!cliApiChunk) {
+    throw new Error('cli-api chunk not found for patchServerDepsInline');
+  }
+
+  let content = await readFile(cliApiChunk, 'utf-8');
+
+  // Packages that internally call expect.extend() and break under npm override.
+  // These must be inlined so they share the same vitest module instance.
+  const inlinePackages = ['@testing-library/jest-dom', '@storybook/test', 'jest-extended'];
+
+  // Find the configResolved handler in ModuleRunnerTransform (vitest:environments-module-runner)
+  // and inject our inline packages after the existing server.deps.inline logic.
+  const original = `if (external.length) {
+          testConfig.server.deps.external ??= [];
+          testConfig.server.deps.external.push(...external);
+        }`;
+
+  const patched = `if (external.length) {
+          testConfig.server.deps.external ??= [];
+          testConfig.server.deps.external.push(...external);
+        }
+        // Auto-inline packages that use expect.extend() internally (#897)
+        // Only inline packages that are actually installed in the project.
+        if (testConfig.server.deps.inline !== true) {
+          testConfig.server.deps.inline ??= [];
+          if (Array.isArray(testConfig.server.deps.inline)) {
+            const _require = createRequire(config.root + "/package.json");
+            const autoInline = ${JSON.stringify(inlinePackages)};
+            for (const pkg of autoInline) {
+              if (testConfig.server.deps.inline.includes(pkg)) continue;
+              try {
+                _require.resolve(pkg);
+                testConfig.server.deps.inline.push(pkg);
+              } catch {
+                // Package not installed in the project — skip silently
+              }
+            }
+          }
+        }`;
+
+  if (!content.includes(original)) {
+    throw new Error(
+      'Could not find server.deps.external pattern in ' +
+        cliApiChunk +
+        '. This likely means vitest code has changed and the patch needs to be updated.',
+    );
+  }
+
+  content = content.replace(original, patched);
+  await writeFile(cliApiChunk, content, 'utf-8');
+  console.log(`  Added auto-inline for: ${inlinePackages.join(', ')}`);
 }
 
 /**

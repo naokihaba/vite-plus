@@ -13,7 +13,8 @@
   "vibe-dashboard": {
     "repository": "https://github.com/voidzero-dev/vibe-dashboard.git",
     "branch": "main",
-    "hash": "fcb0518e75e0f05e09ac910dcc88090220dfd3ae"
+    "hash": "158e4a0c3d8a1801e330300a5deba4506fd5dfb9",
+    "forceFreshMigration": true
   },
   "rollipop": {
     "repository": "https://github.com/leegeunhyeok/rollipop.git",
@@ -64,6 +65,37 @@
   "vp-config": {
     "repository": "https://github.com/kazupon/vp-config.git",
     "branch": "main",
-    "hash": "b58c48d71a17c25dec71a003535e6312791ce2aa"
+    "hash": "b58c48d71a17c25dec71a003535e6312791ce2aa",
+    "forceFreshMigration": true
+  },
+  "vinext": {
+    "repository": "https://github.com/cloudflare/vinext.git",
+    "branch": "main",
+    "hash": "f78dd2b39f5b02242417e0a684b1f2f55d3dbdff",
+    "forceFreshMigration": true
+  },
+  "reactive-resume": {
+    "repository": "https://github.com/amruthpillai/reactive-resume.git",
+    "branch": "main",
+    "hash": "f4e2d05f25539ba64a97368f6e35b33b2a7bed05",
+    "forceFreshMigration": true
+  },
+  "yaak": {
+    "repository": "https://github.com/mountain-loop/yaak.git",
+    "branch": "main",
+    "hash": "b4a1c418bb3f923858dd55729f585e189327a038",
+    "forceFreshMigration": true
+  },
+  "npmx.dev": {
+    "repository": "https://github.com/npmx-dev/npmx.dev.git",
+    "branch": "main",
+    "hash": "230b7c7ddb6bb8551ce797144f0ce0f047ff8d7d",
+    "forceFreshMigration": true
+  },
+  "vite-plus-jest-dom-repro": {
+    "repository": "https://github.com/why-reproductions-are-required/vite-plus-jest-dom-repro.git",
+    "branch": "master",
+    "hash": "01bd9ce1ac66ee3c21ed8a7f14311317d87fb999",
+    "forceFreshMigration": true
   }
 }

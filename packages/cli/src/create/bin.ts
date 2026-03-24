@@ -53,7 +53,7 @@ import {
 } from './templates/index.js';
 import { InitialMonorepoAppDir } from './templates/monorepo.js';
 import { BuiltinTemplate, TemplateType } from './templates/types.js';
-import { formatTargetDir } from './utils.js';
+import { deriveDefaultPackageName, formatTargetDir } from './utils.js';
 
 const helpMessage = renderCliDoc({
   usage: 'vp create [TEMPLATE] [OPTIONS] [-- TEMPLATE_OPTIONS]',
@@ -570,8 +570,42 @@ Use \`vp create --list\` to list all available templates, or run \`vp create --h
     }
   }
 
-  if (isBuiltinTemplate && !targetDir) {
-    if (selectedTemplateName === BuiltinTemplate.monorepo) {
+  if (isBuiltinTemplate && (!targetDir || targetDir === '.')) {
+    if (targetDir === '.') {
+      // Current directory: auto-derive package name from cwd, no prompt
+      const fallbackName =
+        selectedTemplateName === BuiltinTemplate.monorepo
+          ? 'vite-plus-monorepo'
+          : `vite-plus-${selectedTemplateName.split(':')[1]}`;
+      packageName = deriveDefaultPackageName(
+        cwd,
+        workspaceInfoOptional.monorepoScope,
+        fallbackName,
+      );
+      if (isMonorepo) {
+        if (!cwdRelativeToRoot) {
+          // At monorepo root: scaffolding here would overwrite the entire workspace
+          cancelAndExit(
+            'Cannot scaffold into the monorepo root directory. Use --directory to specify a target directory',
+            1,
+          );
+        }
+        // Check if cwd is inside an existing workspace package
+        const enclosingPackage = workspaceInfoOptional.packages.find(
+          (pkg) => cwdRelativeToRoot === pkg.path || cwdRelativeToRoot.startsWith(`${pkg.path}/`),
+        );
+        if (enclosingPackage) {
+          cancelAndExit(
+            `Cannot scaffold inside existing package "${enclosingPackage.name}" (${enclosingPackage.path}). Use --directory to specify a different location`,
+            1,
+          );
+        }
+        // Resolve '.' to the path relative to rootDir
+        // so that scaffolding happens in cwd, not at the workspace root
+        targetDir = cwdRelativeToRoot;
+      }
+      prompts.log.info(`Using package name: ${accent(packageName)}`);
+    } else if (selectedTemplateName === BuiltinTemplate.monorepo) {
       const selected = await promptPackageNameAndTargetDir(
         getRandomProjectName({ fallbackName: 'vite-plus-monorepo' }),
         options.interactive,
@@ -788,7 +822,7 @@ Use \`vp create --list\` to list all available templates, or run \`vp create --h
         : selected.targetDir;
     }
     pauseCreateProgress();
-    await checkProjectDirExists(targetDir, options.interactive);
+    await checkProjectDirExists(path.join(workspaceInfo.rootDir, targetDir), options.interactive);
     resumeCreateProgress();
     updateCreateProgress('Generating project');
     result = await executeBuiltinTemplate(
