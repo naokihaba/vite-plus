@@ -45,7 +45,7 @@ export async function executeBuiltinTemplate(
       options?.silent ?? false,
     );
     if (result.exitCode !== 0) {
-      return { ...result, projectDir: templateInfo.targetDir };
+      return { exitCode: result.exitCode };
     }
     const fullPath = path.join(workspaceInfo.rootDir, templateInfo.targetDir);
     setPackageName(fullPath, templateInfo.packageName);
@@ -71,7 +71,7 @@ export async function executeBuiltinTemplate(
     options?.silent ?? false,
   );
   if (result.exitCode !== 0) {
-    return { ...result, projectDir: templateInfo.targetDir };
+    return { exitCode: result.exitCode };
   }
   const fullPath = path.join(workspaceInfo.rootDir, templateInfo.targetDir);
   // set package name in the project directory
