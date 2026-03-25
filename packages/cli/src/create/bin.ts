@@ -51,7 +51,6 @@ import {
   executeMonorepoTemplate,
   executeRemoteTemplate,
 } from './templates/index.js';
-import { InitialMonorepoAppDir } from './templates/monorepo.js';
 import { BuiltinTemplate, TemplateType } from './templates/types.js';
 import { deriveDefaultPackageName, formatTargetDir } from './utils.js';
 
@@ -796,7 +795,7 @@ Use \`vp create --list\` to list all available templates, or run \`vp create --h
     showCreateSummary({
       description: describeScaffold(selectedTemplateName, selectedTemplateArgs),
       installSummary,
-      nextCommand: getNextCommand(projectDir, `vp dev ${InitialMonorepoAppDir}`),
+      nextCommand: getNextCommand(projectDir, 'vp run'),
       packageManager: workspaceInfo.packageManager,
       packageManagerVersion: workspaceInfo.downloadPackageManager.version,
       projectDir,
@@ -963,12 +962,7 @@ Use \`vp create --list\` to list all available templates, or run \`vp create --h
   showCreateSummary({
     description: describeScaffold(selectedTemplateName, selectedTemplateArgs),
     installSummary,
-    nextCommand: isMonorepo
-      ? `vp dev ${projectDir}`
-      : getNextCommand(
-          projectDir,
-          selectedTemplateName === BuiltinTemplate.library ? 'vp run dev' : 'vp dev',
-        ),
+    nextCommand: getNextCommand(projectDir, 'vp run'),
     packageManager: workspaceInfo.packageManager,
     packageManagerVersion: workspaceInfo.downloadPackageManager.version,
     projectDir,
