@@ -408,29 +408,18 @@ async fn check_path() -> bool {
 
     // Check if bin directory is in PATH
     let bin_path = bin_dir.as_path();
-    let bin_position = paths.iter().position(|p| p == bin_path);
+    let bin_in_path = paths.iter().any(|p| p == bin_path);
 
     let bin_display = abbreviate_home(&bin_dir.as_path().display().to_string());
 
-    match bin_position {
-        Some(0) => {
-            print_check(&output::CHECK.green().to_string(), "vp", "first in PATH");
-        }
-        Some(pos) => {
-            print_check(
-                &output::WARN_SIGN.yellow().to_string(),
-                "vp",
-                &format!("in PATH at position {pos}").yellow().to_string(),
-            );
-            print_hint("For best results, bin should be first in PATH.");
-        }
-        None => {
-            print_check(&output::CROSS.red().to_string(), "vp", &"not in PATH".red().to_string());
-            print_hint(&format!("Expected: {bin_display}"));
-            println!();
-            print_path_fix(&bin_dir);
-            return false;
-        }
+    if bin_in_path {
+        print_check(&output::CHECK.green().to_string(), "vp", "in PATH");
+    } else {
+        print_check(&output::CROSS.red().to_string(), "vp", &"not in PATH".red().to_string());
+        print_hint(&format!("Expected: {bin_display}"));
+        println!();
+        print_path_fix(&bin_dir);
+        return false;
     }
 
     // Show which tool would be executed for each shim
