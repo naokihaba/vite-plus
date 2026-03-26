@@ -1977,3 +1977,82 @@ function setPackageManager(
     return pkg;
   });
 }
+
+export interface NodeVersionManagerDetection {
+  file: string;
+}
+
+/**
+ * Detect a .nvmrc file in the project directory.
+ * Returns undefined if not found or .node-version already exists.
+ */
+export function detectNodeVersionManagerFile(
+  projectPath: string,
+): NodeVersionManagerDetection | undefined {
+  // already has .node-version — skip detection to avoid false positives and preserve existing file
+  if (fs.existsSync(path.join(projectPath, '.node-version'))) {
+    return undefined;
+  }
+
+  const configs = detectConfigs(projectPath);
+  if (configs.nvmrcFile) {
+    return { file: '.nvmrc' };
+  }
+  return undefined;
+}
+
+/**
+ * Parse a version string from a .nvmrc file.
+ * Returns null for unsupported aliases like "node", "stable", "system".
+ */
+export function parseNvmrcVersion(content: string): string | null {
+  const version = content.split('\n')[0]?.trim();
+
+  if (!version) {
+    return null;
+  }
+
+  // Unsupported nvm aliases that have no direct version equivalent
+  if (['node', 'stable', 'iojs', 'system', 'default'].includes(version)) {
+    return null;
+  }
+
+  // LTS aliases (lts/*, lts/iron, etc.) pass through as-is
+  if (version.startsWith('lts/')) {
+    return version;
+  }
+
+  // Strip optional 'v' prefix
+  return version.startsWith('v') ? version.slice(1) : version;
+}
+
+/**
+ * Migrate .nvmrc to .node-version and remove .nvmrc.
+ * Returns true on success, false if migration was skipped or failed.
+ */
+export function migrateNodeVersionManagerFile(
+  projectPath: string,
+  _detection: NodeVersionManagerDetection,
+  report?: MigrationReport,
+): boolean {
+  const sourcePath = path.join(projectPath, '.nvmrc');
+  const nodeVersionPath = path.join(projectPath, '.node-version');
+  const content = fs.readFileSync(sourcePath, 'utf8');
+  const version = parseNvmrcVersion(content);
+
+  if (!version) {
+    warnMigration(
+      '.nvmrc contains an unsupported version alias. Create .node-version manually with your desired Node.js version.',
+      report,
+    );
+    return false;
+  }
+
+  fs.writeFileSync(nodeVersionPath, `${version}\n`);
+  fs.unlinkSync(sourcePath);
+
+  if (report) {
+    report.nodeVersionFileMigrated = true;
+  }
+  return true;
+}
