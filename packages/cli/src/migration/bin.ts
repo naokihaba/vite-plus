@@ -858,7 +858,10 @@ async function main() {
     const nodeVersionDetection = detectNodeVersionManagerFile(workspaceInfoOptional.rootDir);
     if (nodeVersionDetection) {
       const confirmed = await confirmNodeVersionFileMigration(options.interactive);
-      if (confirmed && migrateNodeVersionManagerFile(workspaceInfoOptional.rootDir, nodeVersionDetection, report)) {
+      if (
+        confirmed &&
+        migrateNodeVersionManagerFile(workspaceInfoOptional.rootDir, nodeVersionDetection, report)
+      ) {
         didMigrate = true;
       }
     }
