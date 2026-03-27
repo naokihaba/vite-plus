@@ -2002,11 +2002,12 @@ export function detectNodeVersionManagerFile(
 }
 
 /**
- * Parse a version string from a .nvmrc file.
- * Returns null for unsupported aliases like "node", "stable", "system".
+ * Parse a version alias from a .nvmrc file into a .node-version compatible string.
+ * Accepts the first line of .nvmrc (pre-trimmed).
+ * Returns null for unsupported aliases like "system", "default", "iojs".
  */
-export function parseNvmrcVersion(content: string): string | null {
-  const version = content.split('\n')[0]?.trim();
+export function parseNvmrcVersion(alias: string): string | null {
+  const version = alias.trim();
 
   if (!version) {
     return null;
@@ -2049,8 +2050,8 @@ export function migrateNodeVersionManagerFile(
   const sourcePath = path.join(projectPath, '.nvmrc');
   const nodeVersionPath = path.join(projectPath, '.node-version');
   const content = fs.readFileSync(sourcePath, 'utf8');
-  const originalAlias = content.split('\n')[0]?.trim();
-  const version = parseNvmrcVersion(content);
+  const originalAlias = content.split('\n')[0]?.trim() ?? '';
+  const version = parseNvmrcVersion(originalAlias);
 
   if (!version) {
     warnMigration(

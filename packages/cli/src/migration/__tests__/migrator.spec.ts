@@ -133,37 +133,36 @@ describe('rewritePackageJson', () => {
 
 describe('parseNvmrcVersion', () => {
   it('strips v prefix', () => {
-    expect(parseNvmrcVersion('v20.5.0\n')).toBe('20.5.0');
     expect(parseNvmrcVersion('v20.5.0')).toBe('20.5.0');
   });
 
   it('passes through version without prefix', () => {
-    expect(parseNvmrcVersion('20.5.0\n')).toBe('20.5.0');
-    expect(parseNvmrcVersion('20\n')).toBe('20');
+    expect(parseNvmrcVersion('20.5.0')).toBe('20.5.0');
+    expect(parseNvmrcVersion('20')).toBe('20');
   });
 
   it('passes through lts aliases', () => {
-    expect(parseNvmrcVersion('lts/*\n')).toBe('lts/*');
-    expect(parseNvmrcVersion('lts/iron\n')).toBe('lts/iron');
-    expect(parseNvmrcVersion('lts/-1\n')).toBe('lts/-1');
+    expect(parseNvmrcVersion('lts/*')).toBe('lts/*');
+    expect(parseNvmrcVersion('lts/iron')).toBe('lts/iron');
+    expect(parseNvmrcVersion('lts/-1')).toBe('lts/-1');
   });
 
   it('converts node/stable aliases to lts/*', () => {
-    expect(parseNvmrcVersion('node\n')).toBe('lts/*');
-    expect(parseNvmrcVersion('stable\n')).toBe('lts/*');
+    expect(parseNvmrcVersion('node')).toBe('lts/*');
+    expect(parseNvmrcVersion('stable')).toBe('lts/*');
   });
 
   it('returns null for untranslatable aliases', () => {
-    expect(parseNvmrcVersion('iojs\n')).toBeNull();
-    expect(parseNvmrcVersion('system\n')).toBeNull();
-    expect(parseNvmrcVersion('default\n')).toBeNull();
+    expect(parseNvmrcVersion('iojs')).toBeNull();
+    expect(parseNvmrcVersion('system')).toBeNull();
+    expect(parseNvmrcVersion('default')).toBeNull();
     expect(parseNvmrcVersion('')).toBeNull();
   });
 
   it('returns null for invalid version strings', () => {
-    expect(parseNvmrcVersion('v\n')).toBeNull();
-    expect(parseNvmrcVersion('laetst\n')).toBeNull();
-    expect(parseNvmrcVersion('20.5.0.1\n')).toBeNull();
+    expect(parseNvmrcVersion('v')).toBeNull();
+    expect(parseNvmrcVersion('laetst')).toBeNull();
+    expect(parseNvmrcVersion('20.5.0.1')).toBeNull();
   });
 });
 
