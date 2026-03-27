@@ -148,9 +148,12 @@ describe('parseNvmrcVersion', () => {
     expect(parseNvmrcVersion('lts/-1\n')).toBe('lts/-1');
   });
 
-  it('returns null for unsupported aliases', () => {
-    expect(parseNvmrcVersion('node\n')).toBeNull();
-    expect(parseNvmrcVersion('stable\n')).toBeNull();
+  it('converts node/stable aliases to lts/*', () => {
+    expect(parseNvmrcVersion('node\n')).toBe('lts/*');
+    expect(parseNvmrcVersion('stable\n')).toBe('lts/*');
+  });
+
+  it('returns null for untranslatable aliases', () => {
     expect(parseNvmrcVersion('iojs\n')).toBeNull();
     expect(parseNvmrcVersion('system\n')).toBeNull();
     expect(parseNvmrcVersion('default\n')).toBeNull();

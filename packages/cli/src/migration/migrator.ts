@@ -2012,12 +2012,16 @@ export function parseNvmrcVersion(content: string): string | null {
     return null;
   }
 
-  // These aliases are intentionally not mapped to lts/* even though it might seem natural.
-  // "node" and "stable" resolve to the latest Node.js release, which is not always an LTS
-  // (e.g. Node 25 is the latest but not LTS). Silently converting to lts/* could downgrade
-  // users to Node 22 without them noticing. We emit a warning instead and let users decide.
-  // "iojs", "system", and "default" have no meaningful equivalent at all.
-  if (['node', 'stable', 'iojs', 'system', 'default'].includes(version)) {
+  // "node" and "stable" mean "latest stable release" which maps closely to lts/*.
+  // Starting from Node 27, all releases will be LTS, so the gap is shrinking.
+  // We map these to lts/* and log the conversion so users are aware.
+  if (version === 'node' || version === 'stable') {
+    return 'lts/*';
+  }
+
+  // "iojs", "system", and "default" have no meaningful equivalent and cannot be auto-migrated.
+  // TODO: consider an interactive prompt (e.g. "pin to lts/* or skip?") for these cases.
+  if (version === 'iojs' || version === 'system' || version === 'default') {
     return null;
   }
 
@@ -2046,6 +2050,7 @@ export function migrateNodeVersionManagerFile(
   const sourcePath = path.join(projectPath, '.nvmrc');
   const nodeVersionPath = path.join(projectPath, '.node-version');
   const content = fs.readFileSync(sourcePath, 'utf8');
+  const originalAlias = content.split('\n')[0]?.trim();
   const version = parseNvmrcVersion(content);
 
   if (!version) {
@@ -2054,6 +2059,10 @@ export function migrateNodeVersionManagerFile(
       report,
     );
     return false;
+  }
+
+  if (version === 'lts/*' && (originalAlias === 'node' || originalAlias === 'stable')) {
+    infoMigration(`"${originalAlias}" in .nvmrc is not a specific version; automatically mapping to "lts/*"`, report);
   }
 
   fs.writeFileSync(nodeVersionPath, `${version}\n`);
