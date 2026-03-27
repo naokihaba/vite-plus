@@ -2020,7 +2020,6 @@ export function parseNvmrcVersion(content: string): string | null {
   }
 
   // "iojs", "system", and "default" have no meaningful equivalent and cannot be auto-migrated.
-  // TODO: consider an interactive prompt (e.g. "pin to lts/* or skip?") for these cases.
   if (version === 'iojs' || version === 'system' || version === 'default') {
     return null;
   }
@@ -2061,6 +2060,8 @@ export function migrateNodeVersionManagerFile(
     return false;
   }
 
+  // TODO: remove this log once Node 27+ makes all releases LTS, at which point
+  // "node"/"stable" and "lts/*" will be effectively equivalent.
   if (version === 'lts/*' && (originalAlias === 'node' || originalAlias === 'stable')) {
     prompts.log.info(
       `"${originalAlias}" in .nvmrc is not a specific version; automatically mapping to "lts/*"`,
