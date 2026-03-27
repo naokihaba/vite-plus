@@ -2062,7 +2062,9 @@ export function migrateNodeVersionManagerFile(
   }
 
   if (version === 'lts/*' && (originalAlias === 'node' || originalAlias === 'stable')) {
-    prompts.log.info(`"${originalAlias}" in .nvmrc is not a specific version; automatically mapping to "lts/*"`);
+    prompts.log.info(
+      `"${originalAlias}" in .nvmrc is not a specific version; automatically mapping to "lts/*"`,
+    );
   }
 
   fs.writeFileSync(nodeVersionPath, `${version}\n`);
