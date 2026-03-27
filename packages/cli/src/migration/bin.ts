@@ -182,7 +182,6 @@ async function confirmNodeVersionFileMigration(interactive: boolean): Promise<bo
     }
     return !!confirmed;
   }
-  prompts.log.info('.nvmrc detected. Auto-migrating to .node-version...');
   return true;
 }
 

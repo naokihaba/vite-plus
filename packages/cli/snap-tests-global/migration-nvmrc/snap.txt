@@ -1,8 +1,6 @@
 > vp migrate --no-interactive # migration should detect .nvmrc and auto-migrate to .node-version
 VITE+ - The Unified Toolchain for the Web
 
-
-.nvmrc detected. Auto-migrating to .node-version...
 ◇ Migrated . to Vite+<repeat>
 • Node <semver>  pnpm <semver>
 • 2 config updates applied
