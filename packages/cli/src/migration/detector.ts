@@ -171,7 +171,7 @@ export function detectConfigs(projectPath: string): ConfigFiles {
 
   // Check package.json for "prettier" key and Volta node version
   const packageJsonPath = path.join(projectPath, 'package.json');
-  
+
   if (fs.existsSync(packageJsonPath)) {
     try {
       const content = fs.readFileSync(packageJsonPath, 'utf8');
@@ -184,7 +184,6 @@ export function detectConfigs(projectPath: string): ConfigFiles {
       if (typeof pkg.volta?.node === 'string') {
         configs.voltaNode = true;
       }
-
     } catch {
       // ignore parse errors
     }
