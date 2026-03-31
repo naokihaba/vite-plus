@@ -1,4 +1,4 @@
-> vp migrate --no-interactive # migration should detect volta.node in package.json and migrate to .node-version
+> vp migrate --no-interactive # .nvmrc should take priority over volta.node
 VITE+ - The Unified Toolchain for the Web
 
 ◇ Migrated . to Vite+<repeat>
@@ -8,8 +8,9 @@ VITE+ - The Unified Toolchain for the Web
 → Manual follow-up:
   - Remove the "volta" field from package.json
 
-> cat .node-version # check .node-version is created from volta.node
+> cat .node-version # check .node-version comes from .nvmrc (v20.5.0), not volta.node (18.0.0)
 20.5.0
 
-> grep '"volta"' package.json # check volta field is preserved in package.json (not removed)
+> test ! -f .nvmrc # check .nvmrc is removed
+> grep '"volta"' package.json # volta field must remain intact
   "volta": {
