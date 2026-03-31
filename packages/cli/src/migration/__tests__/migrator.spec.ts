@@ -313,7 +313,11 @@ describe('migrateNodeVersionManagerFile', () => {
       warnings: [],
       manualSteps: [],
     };
-    migrateNodeVersionManagerFile(tmpDir, { file: 'package.json', voltaNodeVersion: '20.5.0' }, report);
+    migrateNodeVersionManagerFile(
+      tmpDir,
+      { file: 'package.json', voltaNodeVersion: '20.5.0' },
+      report,
+    );
     expect(report.nodeVersionFileMigrated).toBe(true);
     expect(report.manualSteps).toContain('Remove the "volta" field from package.json');
   });
