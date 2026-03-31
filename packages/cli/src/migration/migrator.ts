@@ -2083,6 +2083,8 @@ export type NodeVersionManagerDetection =
 
 /**
  * Detect a .nvmrc file in the project directory.
+ * If not found, check for a Volta node version in package.json.
+ * If either is found, return the relevant info for migration.
  * Returns undefined if not found or .node-version already exists.
  */
 export function detectNodeVersionManagerFile(
