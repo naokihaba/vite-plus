@@ -2078,7 +2078,7 @@ function setPackageManager(
 }
 
 export type NodeVersionManagerDetection =
-  | { file: '.nvmrc' }
+  | { file: '.nvmrc'; voltaPresent?: true }
   | { file: 'package.json'; voltaNodeVersion: string };
 
 /**
@@ -2095,9 +2095,11 @@ export function detectNodeVersionManagerFile(
 
   const configs = detectConfigs(projectPath);
 
-  // .nvmrc takes priority over volta.node when both are present
+  // .nvmrc takes priority over volta.node when both are present.
+  // voltaPresent is carried through so the migration step can remind the user
+  // to remove the now-redundant volta field from package.json.
   if (configs.nvmrcFile) {
-    return { file: '.nvmrc' };
+    return configs.voltaNode ? { file: '.nvmrc', voltaPresent: true } : { file: '.nvmrc' };
   }
 
   if (configs.voltaNode) {
@@ -2160,15 +2162,19 @@ export function migrateNodeVersionManagerFile(
   // Volta: node version was already extracted during detection — no package.json re-read needed
   if (detection.file === 'package.json') {
     const { voltaNodeVersion } = detection;
-    if (!semver.valid(voltaNodeVersion)) {
+
+    // Normalize Volta's "lts" alias to the .node-version compatible form
+    const resolvedVersion = voltaNodeVersion === 'lts' ? 'lts/*' : voltaNodeVersion;
+
+    if (!semver.valid(resolvedVersion) && resolvedVersion !== 'lts/*') {
       warnMigration(
-        'package.json volta.node is not a valid version. Create .node-version manually with your desired Node.js version.',
+        `package.json volta.node "${voltaNodeVersion}" is not an exact version. Pin an exact version (e.g. ${voltaNodeVersion}.0 or run \`volta pin node@${voltaNodeVersion}\`) then re-run migration.`,
         report,
       );
       return false;
     }
 
-    fs.writeFileSync(nodeVersionPath, `${voltaNodeVersion}\n`);
+    fs.writeFileSync(nodeVersionPath, `${resolvedVersion}\n`);
     if (report) {
       report.manualSteps.push('Remove the "volta" field from package.json');
       report.nodeVersionFileMigrated = true;
@@ -2205,6 +2211,12 @@ export function migrateNodeVersionManagerFile(
 
   if (report) {
     report.nodeVersionFileMigrated = true;
+    // Both .nvmrc and volta were present; .nvmrc was migrated but volta still lingers.
+    if (detection.voltaPresent) {
+      report.manualSteps.push('Remove the "volta" field from package.json');
+    }
+  } else if (detection.voltaPresent) {
+    prompts.log.info('You can now remove the "volta" field from package.json manually.');
   }
   return true;
 }
