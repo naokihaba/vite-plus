@@ -765,10 +765,7 @@ mod tests {
             nu_content.contains("VP_SHELL_NU"),
             "env.nu should use VP_SHELL_NU explicit marker instead of inherited NU_VERSION"
         );
-        assert!(
-            nu_content.contains("load-env"),
-            "env.nu should use load-env to apply exports"
-        );
+        assert!(nu_content.contains("load-env"), "env.nu should use load-env to apply exports");
     }
 
     #[tokio::test]
