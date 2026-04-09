@@ -655,14 +655,16 @@ fn print_path_instructions(bin_dir: &vite_path::AbsolutePath) {
         .parent()
         .map(|p| p.as_path().display().to_string())
         .unwrap_or_else(|| bin_dir.as_path().display().to_string());
-    let home_path = if let Ok(home_dir) = std::env::var("HOME") {
+    let (home_path, nu_home_path) = if let Ok(home_dir) = std::env::var("HOME") {
         if let Some(suffix) = home_path.strip_prefix(&home_dir) {
-            format!("$HOME{suffix}")
+            // POSIX/Fish use $HOME; Nushell's `source` is a parse-time keyword
+            // that cannot expand $HOME (a runtime env var), so use ~ instead.
+            (format!("$HOME{suffix}"), format!("~{suffix}"))
         } else {
-            home_path
+            (home_path.clone(), home_path)
         }
     } else {
-        home_path
+        (home_path.clone(), home_path)
     };
 
     println!("{}", help::render_heading("Next Steps"));
@@ -676,7 +678,7 @@ fn print_path_instructions(bin_dir: &vite_path::AbsolutePath) {
     println!();
     println!("  For Nushell, add to ~/.config/nushell/config.nu:");
     println!();
-    println!("  source \"{home_path}/env.nu\"");
+    println!("  source \"{nu_home_path}/env.nu\"");
     println!();
     println!("  For PowerShell, add to your $PROFILE:");
     println!();
