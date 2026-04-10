@@ -46,23 +46,6 @@ pub async fn execute(refresh: bool, env_only: bool) -> Result<ExitStatus, Error>
     // Create env files with PATH guard (prevents duplicate PATH entries)
     create_env_files(&vite_plus_home).await?;
 
-    // Generate Fish completion file at ~/.vite-plus/vp.fish for Fish shell users.
-    // Nushell completions delegate to Fish dynamically via VP_COMPLETE=fish at runtime.
-    // command_with_help() uses a deep call stack, so we spawn a thread with a larger stack.
-    let fish_completions_path = vite_plus_home.join("vp.fish").as_path().to_path_buf();
-    std::thread::Builder::new()
-        .stack_size(8 * 1024 * 1024)
-        .spawn(move || -> std::io::Result<()> {
-            let mut file = std::fs::File::create(&fish_completions_path)?;
-            let mut cmd = crate::cli::command_with_help();
-            clap_complete::generate(clap_complete::Shell::Fish, &mut cmd, "vp", &mut file);
-            Ok(())
-        })
-        .map_err(Error::CommandExecution)?
-        .join()
-        .map_err(|_| Error::Other("Fish completion generation failed".into()))?
-        .map_err(Error::CommandExecution)?;
-
     if env_only {
         println!("{}", help::render_heading("Setup"));
         println!("  Updated shell environment files.");
