@@ -751,7 +751,10 @@ mod tests {
             !nu_content.contains("__VP_BIN__"),
             "env.nu should not contain __VP_BIN__ placeholder"
         );
-        assert!(nu_content.contains("~/bin"), "env.nu should reference ~/bin (not $HOME/bin — Nushell does not expand $HOME in string literals)");
+        assert!(
+            nu_content.contains("~/bin"),
+            "env.nu should reference ~/bin (not $HOME/bin — Nushell does not expand $HOME in string literals)"
+        );
         assert!(
             nu_content.contains("VP_ENV_USE_EVAL_ENABLE"),
             "env.nu should set VP_ENV_USE_EVAL_ENABLE"
