@@ -84,7 +84,9 @@ export function rewriteTypesInTsconfig(filePath: string): boolean {
   };
 
   const toReplace = types
-    .map((t, i) => (typeof t === 'string' && t in REPLACEMENTS ? { i, newVal: REPLACEMENTS[t] } : null))
+    .map((t, i) =>
+      typeof t === 'string' && t in REPLACEMENTS ? { i, newVal: REPLACEMENTS[t] } : null,
+    )
     .filter((x): x is { i: number; newVal: string } => x !== null);
 
   if (toReplace.length === 0) {

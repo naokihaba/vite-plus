@@ -859,7 +859,9 @@ describe('rewriteStandaloneProject — tsconfig types rewriting', () => {
     rewriteStandaloneProject(tmpDir, makeWorkspaceInfo(tmpDir, PackageManager.pnpm), true, true);
 
     const tsconfig = readJson(path.join(tmpDir, 'tsconfig.json'));
-    expect((tsconfig.compilerOptions as { types: string[] }).types).toContain('vite-plus/pack/client');
+    expect((tsconfig.compilerOptions as { types: string[] }).types).toContain(
+      'vite-plus/pack/client',
+    );
     expect((tsconfig.compilerOptions as { types: string[] }).types).not.toContain('tsdown/client');
   });
 
@@ -885,6 +887,8 @@ describe('rewriteStandaloneProject — tsconfig types rewriting', () => {
     rewriteStandaloneProject(tmpDir, makeWorkspaceInfo(tmpDir, PackageManager.pnpm), true, true);
 
     const tsconfig = readJson(path.join(tmpDir, 'tsconfig.node.json'));
-    expect((tsconfig.compilerOptions as { types: string[] }).types).toContain('vite-plus/pack/client');
+    expect((tsconfig.compilerOptions as { types: string[] }).types).toContain(
+      'vite-plus/pack/client',
+    );
   });
 });
