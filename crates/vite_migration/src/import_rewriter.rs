@@ -2566,10 +2566,7 @@ export default defineConfig({});"#
         let content = r#"/// <reference types="tsdown/client" />"#;
         let result = rewrite_import_content(content, &SkipPackages::default()).unwrap();
         assert!(result.updated);
-        assert_eq!(
-            result.content,
-            r#"/// <reference types="vite-plus/pack/client" />"#
-        );
+        assert_eq!(result.content, r#"/// <reference types="vite-plus/pack/client" />"#);
     }
 
     #[test]
