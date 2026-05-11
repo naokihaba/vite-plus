@@ -363,11 +363,6 @@ static RE_REF_VITE_SUBPATH: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"^(\s*///\s*<reference\s+types\s*=\s*["'])vite/(.+?)(["']\s*/>)"#).unwrap()
 });
 
-/// `tsdown/client` → `vite-plus/pack/client`
-static RE_REF_TSDOWN_CLIENT: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"^(\s*///\s*<reference\s+types\s*=\s*["'])tsdown/client(["']\s*/>)"#).unwrap()
-});
-
 /// bare `tsdown` → `vite-plus/pack`
 static RE_REF_TSDOWN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"^(\s*///\s*<reference\s+types\s*=\s*["'])tsdown(["']\s*/>)"#).unwrap()
