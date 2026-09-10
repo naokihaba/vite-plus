@@ -118,7 +118,6 @@ After the migration:
 - Confirm `vite` imports were rewritten to `vite-plus` where needed
 - Confirm `vitest` imports were rewritten to `vite-plus/test` (and `@vitest/browser*` to `vite-plus/test/browser*`) where needed
 - On pnpm, keep the `vite` / `vitest` dependency entries configured by `vp migrate` so the workspace aliases and overrides stay effective; with other package managers, you can remove them once those rewrites are confirmed
-- Remove old `@vitest/browser` and `@vitest/browser-preview` dependencies once those rewrites are confirmed; keep `@vitest/browser-playwright` or `@vitest/browser-webdriverio` and their framework dependencies if your tests use them
 - Move remaining tool-specific config into the appropriate blocks in `vite.config.ts`
 
 Command mapping to keep in mind:
