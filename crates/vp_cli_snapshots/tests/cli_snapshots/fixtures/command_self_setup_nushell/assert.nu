@@ -67,4 +67,21 @@ def main [mode: string] {
   print "Both sessions have the configured XDG_DATA_HOME after startup: true"
   print $"Installer and session directories match: ($expected_loaded)"
   print $"Fresh session loaded Vite+ environment: ($state.loaded)"
+
+  if $mode == "config" {
+    # Apply the documented workaround without changing the XDG settings.
+    # source requires a parse-time path, so write a quoted literal into config.nu.
+    let env_file = ($env.VP_HOME | path join "env.nu" | to nuon)
+    $"\nsource ($env_file)\n" | save --append ($config_dir | path join "config.nu")
+    let repaired = (^$nu.current-exe --no-history --execute 'try { let help = (^vp help | complete); if $help.exit_code != 0 { error make {msg: $help.stderr} }; source probe.nu } catch { |err| print -e $err; exit 1 }; exit 0' | complete)
+    if $repaired.exit_code != 0 {
+      error make {msg: $"Session with the documented source line failed: ($repaired.stdout) ($repaired.stderr)"}
+    }
+    let repaired_state = ($repaired.stdout | from json)
+    if not $repaired_state.loaded or $repaired_state.directory != $session_dir or $repaired_state.data_home != $custom_data {
+      error make {msg: "The source workaround did not load Vite+ with the original XDG configuration"}
+    }
+    print "After adding source to config.nu, a fresh session loaded Vite+: true"
+    print "vp help succeeded in the fresh session"
+  }
 }

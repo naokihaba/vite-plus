@@ -18,4 +18,6 @@ Standalone setup completed and wrote vite-plus.nu
 Both sessions have the configured XDG_DATA_HOME after startup: true
 Installer and session directories match: false
 Fresh session loaded Vite+ environment: false
+After adding source to config.nu, a fresh session loaded Vite+: true
+vp help succeeded in the fresh session
 ```
