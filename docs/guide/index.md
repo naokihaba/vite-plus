@@ -30,6 +30,8 @@ The `vp-setup.exe` is not yet code-signed. Your browser may show a warning when 
 
 The installer scripts and `vp-setup.exe` read [environment variables](/guide/installer-env-vars) such as `VP_VERSION` and `VP_HOME`.
 
+If you use Nushell with custom XDG directories, read the [Nushell startup requirements](/guide/installer-env-vars#nushell-and-xdg-directories) before installing.
+
 After installation, open a new shell and run:
 
 ```bash
