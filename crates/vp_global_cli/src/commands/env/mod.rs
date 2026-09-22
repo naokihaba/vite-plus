@@ -24,7 +24,7 @@ mod unpin;
 mod r#use;
 mod which;
 
-use std::process::ExitStatus;
+use std::{io, process::ExitStatus};
 
 #[cfg(windows)]
 pub(crate) use setup::{cleanup_legacy_windows_shim, get_trampoline_path, remove_or_rename_to_old};
@@ -41,7 +41,7 @@ fn print_env_header() {
 }
 
 fn print_env_clean_tip() {
-    vp_shared::output::raw("");
+    vp_shared::output::print_and_flush(&mut io::stdout().lock(), "\n");
     vp_shared::output::note(
         "Run `vp env clean` to free disk space from unused managed runtimes and package manager caches.",
     );
