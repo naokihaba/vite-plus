@@ -40,7 +40,6 @@ fn print_env_header() {
     vp_shared::header::print_header();
 }
 
-#[deny(clippy::print_stdout)]
 fn print_env_clean_tip() {
     vp_shared::output::print_and_flush(&mut io::stdout().lock(), "\n");
     vp_shared::output::note(
@@ -213,8 +212,10 @@ async fn print_env(cwd: AbsolutePathBuf, scope: Option<String>) -> Result<ExitSt
     let snippet = format_path_snippet(detect_shell(), &bin_dirs);
 
     // Print shell snippet
-    println!("# Add to your shell to use this environment for this session:");
-    println!("{snippet}");
+    vp_shared::output::print_stdout_line(format_args!(
+        "# Add to your shell to use this environment for this session:"
+    ));
+    vp_shared::output::print_stdout_line(format_args!("{snippet}"));
 
     Ok(ExitStatus::default())
 }

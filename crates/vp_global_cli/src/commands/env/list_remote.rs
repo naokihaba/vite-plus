@@ -1,5 +1,3 @@
-#![deny(clippy::print_stdout)]
-
 use std::{collections::BTreeMap, io, process::ExitStatus};
 
 use console::style;
