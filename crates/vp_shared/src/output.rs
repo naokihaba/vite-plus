@@ -15,19 +15,31 @@ use console::style;
 ///
 /// Use this for command output that can be piped to a reader which exits early.
 pub fn print_and_flush(writer: &mut dyn Write, message: &str) {
-    writer.write_all(message.as_bytes()).or_else(check_for_writer_error).unwrap();
-    writer.flush().or_else(check_for_writer_error).unwrap();
+    let mut remaining = message.as_bytes();
+    while !remaining.is_empty() {
+        match writer.write(remaining) {
+            Ok(0) => fail_for_writer_error(io::ErrorKind::WriteZero.into()),
+            Ok(written) => remaining = &remaining[written..],
+            Err(error) if error.kind() == io::ErrorKind::BrokenPipe => return,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => std::thread::yield_now(),
+            Err(error) => fail_for_writer_error(error),
+        }
+    }
+
+    loop {
+        match writer.flush() {
+            Ok(()) => return,
+            Err(error) if error.kind() == io::ErrorKind::BrokenPipe => return,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => std::thread::yield_now(),
+            Err(error) => fail_for_writer_error(error),
+        }
+    }
 }
 
-fn check_for_writer_error(error: io::Error) -> io::Result<()> {
-    if matches!(
-        error.kind(),
-        io::ErrorKind::Interrupted | io::ErrorKind::BrokenPipe | io::ErrorKind::WouldBlock
-    ) {
-        Ok(())
-    } else {
-        Err(error)
-    }
+fn fail_for_writer_error(error: io::Error) -> ! {
+    panic!("failed writing command output: {error}");
 }
 
 /// When set, user-facing stdout output (info/pass/note/success/raw) is routed
@@ -139,6 +151,48 @@ pub fn raw_stderr(msg: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Default)]
+    struct RetryWriter {
+        output: Vec<u8>,
+        write_calls: usize,
+        flush_calls: usize,
+    }
+
+    impl Write for RetryWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.write_calls += 1;
+            match self.write_calls {
+                1 => {
+                    let written = buf.len().min(2);
+                    self.output.extend_from_slice(&buf[..written]);
+                    Ok(written)
+                }
+                2 => Err(io::ErrorKind::WouldBlock.into()),
+                _ => {
+                    self.output.extend_from_slice(buf);
+                    Ok(buf.len())
+                }
+            }
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            self.flush_calls += 1;
+            match self.flush_calls {
+                1 => Err(io::ErrorKind::Interrupted.into()),
+                2 => Err(io::ErrorKind::WouldBlock.into()),
+                _ => Ok(()),
+            }
+        }
+    }
+
+    #[test]
+    fn print_and_flush_retries_temporary_errors_without_losing_output() {
+        let mut writer = RetryWriter::default();
+        print_and_flush(&mut writer, "output\n");
+        assert_eq!(writer.output, b"output\n");
+        assert_eq!(writer.flush_calls, 3);
+    }
 
     #[cfg(unix)]
     #[test]
