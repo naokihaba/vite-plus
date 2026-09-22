@@ -4,9 +4,31 @@
 //! consistent output across the entire CLI. Styling uses console's color detection
 //! for the stream receiving each message.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::{
+    io::{self, Write},
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 use console::style;
+
+/// Write a message and flush it without panicking for expected output-stream errors.
+///
+/// Use this for command output that can be piped to a reader which exits early.
+pub fn print_and_flush(writer: &mut dyn Write, message: &str) {
+    writer.write_all(message.as_bytes()).or_else(check_for_writer_error).unwrap();
+    writer.flush().or_else(check_for_writer_error).unwrap();
+}
+
+fn check_for_writer_error(error: io::Error) -> io::Result<()> {
+    if matches!(
+        error.kind(),
+        io::ErrorKind::Interrupted | io::ErrorKind::BrokenPipe | io::ErrorKind::WouldBlock
+    ) {
+        Ok(())
+    } else {
+        Err(error)
+    }
+}
 
 /// When set, user-facing stdout output (info/pass/note/success/raw) is routed
 /// to stderr instead. Shim dispatch enables this once at entry: a shim's
@@ -112,4 +134,17 @@ pub fn raw_inline(msg: &str) {
 #[expect(clippy::print_stderr, clippy::disallowed_macros)]
 pub fn raw_stderr(msg: &str) {
     eprintln!("{msg}");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn print_and_flush_tolerates_a_closed_pipe() {
+        let (reader, writer) = nix::unistd::pipe().unwrap();
+        drop(reader);
+        print_and_flush(&mut std::fs::File::from(writer), "output\n");
+    }
 }
