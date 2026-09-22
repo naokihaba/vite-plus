@@ -1,5 +1,7 @@
 //! Version command.
 
+#![deny(clippy::print_stdout)]
+
 use std::{
     collections::BTreeMap,
     fs, io,

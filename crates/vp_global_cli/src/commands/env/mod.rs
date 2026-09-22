@@ -40,6 +40,7 @@ fn print_env_header() {
     vp_shared::header::print_header();
 }
 
+#[deny(clippy::print_stdout)]
 fn print_env_clean_tip() {
     vp_shared::output::print_and_flush(&mut io::stdout().lock(), "\n");
     vp_shared::output::note(
