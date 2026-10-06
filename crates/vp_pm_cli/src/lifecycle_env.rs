@@ -20,7 +20,7 @@ use std::{env, ffi::OsString};
 
 use vt_path::AbsolutePathBuf;
 
-use crate::package_manager::{PackageManager, PackageManagerType, package_manager_bin_path};
+use crate::package_manager::{PackageManager, PackageManagerType};
 
 /// Everything [`PackageManager::lifecycle_env_vars`] needs beyond the package
 /// manager itself.
@@ -48,7 +48,7 @@ impl PackageManager {
     /// extensionless shims on Windows.
     #[must_use]
     pub fn lifecycle_exec_path(&self) -> AbsolutePathBuf {
-        let bin_dir = self.install_dir.join("bin");
+        let bin_dir = &self.bin_prefix;
         let js_entry_name = match self.client {
             PackageManagerType::Pnpm => Some("pnpm.cjs"),
             PackageManagerType::Npm => Some("npm-cli.js"),
@@ -74,7 +74,8 @@ impl PackageManager {
                 return native;
             }
         }
-        let shim = package_manager_bin_path(&self.install_dir, &self.client.to_string());
+        let shim = bin_dir.join(self.client.to_string());
+        let shim = if cfg!(windows) { shim.with_extension("cmd") } else { shim };
         // The shim breaks child runners on Windows (see above), so if this
         // shows up in a log the on-disk layout probably changed. (bun never
         // has a JS CLI entry, so the message would be misleading there.)
@@ -200,11 +201,11 @@ mod tests {
         version: &str,
         install_dir: &std::path::Path,
     ) -> PackageManager {
-        PackageManager {
-            client: package_manager_type,
-            version: version.into(),
-            install_dir: AbsolutePathBuf::new(install_dir.to_path_buf()).unwrap(),
-        }
+        PackageManager::from_install_dir(
+            package_manager_type,
+            version,
+            AbsolutePathBuf::new(install_dir.to_path_buf()).unwrap(),
+        )
     }
 
     fn context(node_version: Option<&str>) -> LifecycleEnvContext {
