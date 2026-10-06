@@ -19,5 +19,5 @@ Execute the pinned Yarn binary
 ```
 $ node check-env.js ⊘ cache disabled
 npm_execpath=<home>/.vite-plus/package_manager/yarn/<version>/yarn/bin/yarn.js
-npm_config_user_agent=yarn/<version> npm/? node/<version> <platform> <arch>
+npm_config_user_agent=vp/<version> yarn/<version> npm/? node/<version> <platform> <arch>
 ```

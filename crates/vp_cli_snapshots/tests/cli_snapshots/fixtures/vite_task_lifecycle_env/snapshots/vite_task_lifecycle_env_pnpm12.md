@@ -20,5 +20,5 @@ Execute the pinned native pnpm 12 binary
 ```
 $ node check-env.js ⊘ cache disabled
 npm_execpath=<home>/.vite-plus/package_manager/pnpm/<version>/pnpm/bin/pnpm.native
-npm_config_user_agent=pnpm/<version> npm/? node/? <platform> <arch>
+npm_config_user_agent=vp/<version> pnpm/<version> npm/? node/? <platform> <arch>
 ```

@@ -21,7 +21,10 @@ pub(super) fn stamp_package_manager_lifecycle_env(pm: &PackageManager, node_vers
             "Host Node.js version not provided; stamping the package-manager lifecycle env without it"
         );
     }
-    let context = LifecycleEnvContext { node_version: node_version.map(str::to_string) };
+    let context = LifecycleEnvContext {
+        vp_version: env!("CARGO_PKG_VERSION").to_string(),
+        node_version: node_version.map(str::to_string),
+    };
     for (name, value) in pm.lifecycle_env_vars(&context) {
         // SAFETY: `set_var` is unsound while another thread may read the
         // environment. This runs in the same startup window as the PATH

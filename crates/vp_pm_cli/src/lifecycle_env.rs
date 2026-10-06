@@ -26,6 +26,8 @@ use crate::package_manager::{PackageManager, PackageManagerType};
 /// manager itself.
 #[derive(Debug)]
 pub struct LifecycleEnvContext {
+    /// Vite+ version for the user-agent string.
+    pub vp_version: String,
     /// Node.js version (i.e. `process.version`) for the user-agent string.
     pub node_version: Option<String>,
 }
@@ -126,16 +128,22 @@ impl PackageManager {
             ("npm_execpath", exec_path.as_path().as_os_str().to_os_string()),
             (
                 "npm_config_user_agent",
-                OsString::from(user_agent(self.client, &self.version, node_version)),
+                OsString::from(user_agent(
+                    &context.vp_version,
+                    self.client,
+                    &self.version,
+                    node_version,
+                )),
             ),
         ]
     }
 }
 
-/// `npm_config_user_agent`, formatted the way the package manager itself does:
-/// `pnpm/11.20.0 npm/? node/v22.23.1 linux x64` (pnpm 11, yarn),
-/// `pnpm/12.0.0 npm/? node/? linux x64` (native pnpm 12), or
-/// `npm/10.9.8 node/v22.23.1 linux x64 workspaces/false` (npm).
+/// `npm_config_user_agent` starts with `vp/<version>`, followed by the
+/// package manager's user-agent string:
+/// `vp/1.1.0 pnpm/11.20.0 npm/? node/v22.23.1 linux x64` (pnpm 11, yarn),
+/// `vp/1.1.0 pnpm/12.0.0 npm/? node/? linux x64` (native pnpm 12), or
+/// `vp/1.1.0 npm/10.9.8 node/v22.23.1 linux x64 workspaces/false` (npm).
 ///
 /// Formats follow pnpm's resolved `userAgent` config
 /// (`{name}/{version} npm/? node/{version} {platform} {arch}`,
@@ -144,6 +152,7 @@ impl PackageManager {
 /// {platform} {arch} workspaces/{workspaces}`,
 /// https://github.com/npm/cli/blob/latest/workspaces/config/lib/definitions/definitions.js).
 fn user_agent(
+    vp_version: &str,
     package_manager_type: PackageManagerType,
     version: &str,
     node_version: Option<&str>,
@@ -152,16 +161,17 @@ fn user_agent(
     let platform = node_platform(env::consts::OS);
     let arch = node_arch(env::consts::ARCH);
     match package_manager_type {
-        PackageManagerType::Pnpm | PackageManagerType::Yarn => {
-            vt_str::format!("{package_manager_type}/{version} npm/?{node} {platform} {arch}")
-                .to_string()
-        }
+        PackageManagerType::Pnpm | PackageManagerType::Yarn => vt_str::format!(
+            "vp/{vp_version} {package_manager_type}/{version} npm/?{node} {platform} {arch}"
+        )
+        .to_string(),
         // npm's `workspaces/` flag reflects the `--workspaces` command flag,
         // which `vp run` has no analogue of, so it stays `false` (verified
         // against npm 10.9.8, including inside a workspace root).
-        PackageManagerType::Npm => {
-            vt_str::format!("npm/{version}{node} {platform} {arch} workspaces/false").to_string()
-        }
+        PackageManagerType::Npm => vt_str::format!(
+            "vp/{vp_version} npm/{version}{node} {platform} {arch} workspaces/false"
+        )
+        .to_string(),
         // Callers skip bun before building a user agent.
         PackageManagerType::Bun => String::new(),
     }
@@ -209,7 +219,10 @@ mod tests {
     }
 
     fn context(node_version: Option<&str>) -> LifecycleEnvContext {
-        LifecycleEnvContext { node_version: node_version.map(str::to_string) }
+        LifecycleEnvContext {
+            vp_version: "1.1.0".to_string(),
+            node_version: node_version.map(str::to_string),
+        }
     }
 
     fn vars_map<'a>(
@@ -270,7 +283,7 @@ mod tests {
     }
 
     #[test]
-    fn pnpm_vars_match_pnpm_stamps() {
+    fn pnpm_vars_include_vp_version() {
         let dir = tempfile::tempdir().unwrap();
         let install_dir = dir.path().join("pm");
         write_file(&install_dir.join("bin").join("pnpm.cjs"));
@@ -286,7 +299,7 @@ mod tests {
         assert_eq!(
             map["npm_config_user_agent"],
             OsStr::new(&vt_str::format!(
-                "pnpm/11.20.0 npm/? node/v22.23.1 {} {}",
+                "vp/1.1.0 pnpm/11.20.0 npm/? node/v22.23.1 {} {}",
                 node_platform(env::consts::OS),
                 node_arch(env::consts::ARCH)
             ))
@@ -319,7 +332,7 @@ mod tests {
         assert_eq!(
             map["npm_config_user_agent"],
             OsStr::new(&vt_str::format!(
-                "pnpm/12.0.0 npm/? node/? {} {}",
+                "vp/1.1.0 pnpm/12.0.0 npm/? node/? {} {}",
                 node_platform(env::consts::OS),
                 node_arch(env::consts::ARCH)
             ))
@@ -328,7 +341,7 @@ mod tests {
     }
 
     #[test]
-    fn npm_vars_match_npm_stamps() {
+    fn npm_vars_include_vp_version() {
         let dir = tempfile::tempdir().unwrap();
         let install_dir = dir.path().join("pm");
         write_file(&install_dir.join("bin").join("npm-cli.js"));
@@ -344,7 +357,7 @@ mod tests {
         assert_eq!(
             map["npm_config_user_agent"],
             OsStr::new(&vt_str::format!(
-                "npm/10.9.8 node/v22.23.1 {} {} workspaces/false",
+                "vp/1.1.0 npm/10.9.8 node/v22.23.1 {} {} workspaces/false",
                 node_platform(env::consts::OS),
                 node_arch(env::consts::ARCH)
             ))
@@ -352,12 +365,12 @@ mod tests {
     }
 
     #[test]
-    fn yarn_user_agent_matches_yarn_stamps() {
-        let ua = user_agent(PackageManagerType::Yarn, "1.22.22", Some("v22.23.1"));
+    fn yarn_user_agent_includes_vp_version() {
+        let ua = user_agent("1.1.0", PackageManagerType::Yarn, "1.22.22", Some("v22.23.1"));
         assert_eq!(
             ua,
             vt_str::format!(
-                "yarn/1.22.22 npm/? node/v22.23.1 {} {}",
+                "vp/1.1.0 yarn/1.22.22 npm/? node/v22.23.1 {} {}",
                 node_platform(env::consts::OS),
                 node_arch(env::consts::ARCH)
             )
@@ -367,17 +380,24 @@ mod tests {
 
     #[test]
     fn user_agent_omits_node_segment_without_version() {
-        let ua = user_agent(PackageManagerType::Pnpm, "11.20.0", None);
+        let ua = user_agent("1.1.0", PackageManagerType::Pnpm, "11.20.0", None);
         assert_eq!(
             ua,
             vt_str::format!(
-                "pnpm/11.20.0 npm/? {} {}",
+                "vp/1.1.0 pnpm/11.20.0 npm/? {} {}",
                 node_platform(env::consts::OS),
                 node_arch(env::consts::ARCH)
             )
             .to_string()
         );
         assert!(!ua.contains("node/"));
+    }
+
+    #[test]
+    fn user_agent_preserves_vp_prerelease_version() {
+        let vp_version = "0.0.0-commit.abcdef123456";
+        let ua = user_agent(vp_version, PackageManagerType::Pnpm, "11.20.0", Some("v22.23.1"));
+        assert!(ua.starts_with("vp/0.0.0-commit.abcdef123456 pnpm/11.20.0 "));
     }
 
     #[test]

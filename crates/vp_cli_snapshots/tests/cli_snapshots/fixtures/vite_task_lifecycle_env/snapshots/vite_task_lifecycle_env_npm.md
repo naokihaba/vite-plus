@@ -19,5 +19,5 @@ Execute the pinned npm binary
 ```
 $ node check-env.js ⊘ cache disabled
 npm_execpath=<home>/.vite-plus/package_manager/npm/<version>/npm/bin/npm-cli.js
-npm_config_user_agent=npm/<version> node/<version> <platform> <arch> workspaces/false
+npm_config_user_agent=vp/<version> npm/<version> node/<version> <platform> <arch> workspaces/false
 ```

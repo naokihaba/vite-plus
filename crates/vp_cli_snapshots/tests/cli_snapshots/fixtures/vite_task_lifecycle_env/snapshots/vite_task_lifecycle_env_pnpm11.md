@@ -19,5 +19,5 @@ Execute the pinned pnpm 11 binary
 ```
 $ node check-env.js ⊘ cache disabled
 npm_execpath=<home>/.vite-plus/package_manager/pnpm/<version>/pnpm/bin/pnpm.cjs
-npm_config_user_agent=pnpm/<version> npm/? node/<version> <platform> <arch>
+npm_config_user_agent=vp/<version> pnpm/<version> npm/? node/<version> <platform> <arch>
 ```
