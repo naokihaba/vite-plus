@@ -37,6 +37,14 @@ fn masks_yarn_compound_elapsed_times_as_one_duration() {
 }
 
 #[test]
+fn masks_durations_with_a_space_before_the_unit() {
+    assert_eq!(
+        redact_output("  VITE+ v1.2.0  ready in 123 ms\n".to_owned(), &[], true),
+        "  VITE+ <version>  ready in <duration>\n"
+    );
+}
+
+#[test]
 fn omits_optional_yarn_step_timing_without_hiding_completion_text() {
     for suffix in ["", " in 999ms", " in 1s", " in 1s 0ms", " in 1m 2s"] {
         assert_eq!(
@@ -76,6 +84,50 @@ fn masks_vitest_v5_timing_but_preserves_coverage_percentages() {
         redact_output(input.to_owned(), &[], true),
         " Duration  <duration> (<timing>)\nCoverage 90%\n"
     );
+}
+
+#[test]
+fn omits_optional_vitest_transform_cache_hint() {
+    let summary = " Tests  1 passed (1)\n Duration  3.4s (transform 84%, tests 16%)\n";
+    for project in ["", "[unit] "] {
+        for ci_hint in [
+            "",
+            "           on CI this only helps when the cache directory is persisted between runs\n",
+        ] {
+            let hint = format!(
+                "\n Transform {project}transforming modules took 2.8s · 84% of tracked time, re-done on every run\n\
+                 {}persist transforms across runs with fsModuleCache: true\n\
+                 {ci_hint}{}learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns\n",
+                "           ", "           "
+            );
+            let expected = redact_output(summary.to_owned(), &[], true);
+            assert_eq!(redact_output(format!("{summary}{hint}"), &[], true), expected);
+            assert_eq!(
+                redact_output(format!("{summary}{}", hint.trim_end_matches('\n')), &[], true),
+                expected
+            );
+            assert_eq!(
+                redact_output(format!("{summary}{hint}").replace('\n', "\r\n"), &[], true),
+                expected
+            );
+            assert_eq!(
+                redact_output(format!("{summary}{hint}\nnext command\n"), &[], true),
+                format!("{expected}\nnext command\n")
+            );
+        }
+    }
+}
+
+#[test]
+fn preserves_transform_errors_and_incomplete_cache_hints() {
+    for input in [
+        "Transform failed: cannot load module\n",
+        "\n Transform transforming modules took 2.8s · 84% of tracked time, re-done on every run\n",
+        "persist transforms across runs with fsModuleCache: true\n",
+        "learn more: https://example.com/improving-performance\n",
+    ] {
+        assert_eq!(redact_output(input.to_owned(), &[], true), input.replace("2.8s", "<duration>"));
+    }
 }
 
 #[test]
@@ -195,7 +247,8 @@ fn drops_bun_slow_filesystem_warning_with_optional_progress() {
         "\n 1 script ran across 1 package [12ms]\n",
     );
     let expected = redact_output(format!("bun pm trust v1.4.0 (34cbb9a40)\n{result}"), &[], true);
-    for prefix in ["", "  ⚙️  core-js [1/1] ", "  ⚙ @scope/pkg [12/34] "] {
+    for prefix in ["", "  ⚙️  core-js [1/1] ", "  ⚙ @scope/pkg [12/34] ", "  🔍 Resolving [1/1] "]
+    {
         for cache in ["/private/tmp/vp-local-registry-bun-PXkDcD", "C:/cache with spaces/bun"] {
             let input = format!(
                 "bun pm trust v1.4.0 (34cbb9a40)\n\
@@ -212,6 +265,7 @@ fn preserves_other_bun_warnings_and_script_failures() {
     let input = concat!(
         "warn: install failed for core-js\n",
         "  ⚙️  core-js [1/1] warn: postinstall failed\n",
+        "  🔍 Resolving [1/1] warn: package not found\n",
         "warn: Slow filesystem detected. Custom diagnostic.\n",
         "error: postinstall script from \"core-js\" exited with 1\n",
     );
@@ -650,4 +704,23 @@ fn collapses_debug_escaped_separators_and_preserves_urls() {
         redact_output(input, &[("E:\\Temp\\ws", "<workspace>")], true),
         "at \"<workspace>/src\" see https://viteplus.dev/guide/\n"
     );
+}
+
+#[test]
+fn strips_pnpm_slow_request_warning_but_preserves_request_errors() {
+    let input = concat!(
+        "devDependencies:\n test-vite-plus-package 1.0.0\n\n",
+        "\u{2009}WARN\u{2009} Request took 12675ms: https://registry.npmjs.org/pnpm\n\n",
+        " WARN Request took 10.5s: https://registry.npmjs.org/@scope%2Fpkg\n",
+        "\u{2009}WARN\u{2009} GET https://registry.npmjs.org/pkg error (ETIMEDOUT). Will retry in 10 seconds.\n",
+        "\u{2009}WARN\u{2009} deprecated example@1.0.0: use another package\n",
+        "Done in 13s using pnpm 10.18.0\n",
+    );
+    let expected = concat!(
+        "devDependencies:\n test-vite-plus-package 1.0.0\n\n",
+        "\u{2009}WARN\u{2009} GET https://registry.npmjs.org/pkg error (ETIMEDOUT). Will retry in 10 seconds.\n",
+        "\u{2009}WARN\u{2009} deprecated example@1.0.0: use another package\n\n",
+        "Done in <duration> using pnpm <version>\n",
+    );
+    assert_eq!(redact_output(input.into(), &[], true), expected);
 }

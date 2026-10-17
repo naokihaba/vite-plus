@@ -21,7 +21,7 @@ jobs:
       - name: Set up metadata directory
         run: echo "UPGRADE_DEPS_META_DIR=${RUNNER_TEMP}/upgrade-deps-meta" >> "$GITHUB_ENV"
 
-      - uses: oxc-project/setup-rust@68c3199c5339f965e6e163924c3c450773eba42b # main (pending v1.0.17 — Swatinem/rust-cache v2.9.1 for node24)
+      - uses: ./.github/actions/setup-rust
         with:
           save-cache: ${{ github.ref_name == 'main' }}
           cache-key: upgrade-deps
@@ -71,7 +71,7 @@ jobs:
       - name: Check upgrade dependencies with Kimi K3
         id: check-upgrade-dependencies
         timeout-minutes: 180
-        uses: anthropics/claude-code-action@97c53473391bff1901034d4b454b5bac7ab7a029 # v1.0.239
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         env:
           ANTHROPIC_BASE_URL: https://api.kimi.com/coding/
           CLI_HELP_DIFF_CHANGED: ${{ steps.cli-help-diff.outputs.has-changes }}
@@ -100,7 +100,7 @@ jobs:
             Your goal: after the daily upstream-dependency upgrade, bring the project back
             to a fully green state. The upgrade script has attempted to select the latest
             supported versions, install dependencies, merge the rolldown and vite catalogs,
-            deduplicate dependencies, and synchronize core's external dependency ranges.
+            deduplicate dependencies, and synchronize core's external dependencies.
             The `build-upstream` action
             has attempted a build — your job is to diagnose and fix every error that
             surfaced, then prove the fix is complete by running a final validation pass.
@@ -120,8 +120,10 @@ jobs:
               upgrade script. Use the latest version that its compatibility policy allows.
             - After changing tsdown or rolldown-plugin-dts, run
               `node .github/scripts/upgrade-deps.ts --sync-bundled-deps`, then
-              `pnpm install --no-frozen-lockfile`. Core's external Yuku dependencies
-              must follow the plugin resolved through tsdown. The sync command also
+              `pnpm install --no-frozen-lockfile`. Core's external `yuku-parser` must
+              use the exact installed version resolved by the plugin bundled through
+              tsdown, so it stays aligned with the bundled Yuku code. Do not replace
+              this pin with a version range. The sync command also
               copies Vite's postcss and optional fsevents ranges into core and
               updates the upgrade metadata. `@oxlint/plugins` shares Oxlint's release
               version and must use the exact same version selected by the upgrade script.
@@ -246,7 +248,7 @@ jobs:
       - name: Enhance PR description with Kimi K3
         id: enhance-pr-description
         continue-on-error: true
-        uses: anthropics/claude-code-action@97c53473391bff1901034d4b454b5bac7ab7a029 # v1.0.239
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         env:
           ANTHROPIC_BASE_URL: https://api.kimi.com/coding/
         with:
@@ -374,6 +376,8 @@ jobs:
         with:
           client-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: Close and delete previous PR
         env:

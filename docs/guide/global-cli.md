@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { getScrollOffset } from 'vitepress';
 import { nextTick, onMounted, onUnmounted } from 'vue';
 
 function openTarget() {
@@ -18,9 +17,7 @@ function openTarget() {
   // VitePress cannot measure a heading inside closed details. Correct the scroll after revealing it.
   requestAnimationFrame(() => {
     if (!target.isConnected) return;
-    const top = window.scrollY + target.getBoundingClientRect().top - getScrollOffset()
-      + Number.parseInt(window.getComputedStyle(target).paddingTop, 10);
-    window.scrollTo(0, top);
+    target.scrollIntoView({ block: 'start' });
   });
 }
 
@@ -111,7 +108,7 @@ These variables control the installer scripts and the standalone Windows install
 #### `VP_HOME`
 
 - **Purpose**: Optional pin for the single-root layout. Set it to an absolute path. Vite+ then puts bin, data, cache, config, and state under that directory. The installed CLI reads the same variable. See [Environment](/guide/env).
-- **Default**: unset. Vite+ reuses an existing install in `~/.vite-plus` on Unix or `%USERPROFILE%\.vite-plus` on Windows. The directory must contain a `current` link. Otherwise, a fresh install uses the split platform layout. On Unix, it uses `~/.local/share/vite-plus` and its Vite+-owned `bin` subdirectory. On Windows, it uses `%LOCALAPPDATA%\vite-plus\data` and `%LOCALAPPDATA%\vite-plus\bin`.
+- **Default**: unset. Vite+ reuses an existing install in `~/.vite-plus` on Unix or `%USERPROFILE%\.vite-plus` on Windows. The directory must contain a `current` link. Otherwise, a fresh install uses the split platform layout shown below.
 - **Example**:
 
   ```bash
@@ -123,6 +120,20 @@ These variables control the installer scripts and the standalone Windows install
   # PowerShell
   $env:VP_HOME = "D:\vite-plus"; irm https://vite.plus/ps1 | iex
   ```
+
+Fresh split-layout installations use these defaults:
+
+| Directory | macOS and Linux            | Windows                          |
+| --------- | -------------------------- | -------------------------------- |
+| Data      | `~/.local/share/vite-plus` | `%LOCALAPPDATA%\vite-plus\data`  |
+| Bin       | `<DATA>/bin`               | `%LOCALAPPDATA%\vite-plus\bin`   |
+| Cache     | `~/.cache/vite-plus`       | `%LOCALAPPDATA%\vite-plus\cache` |
+| Config    | `~/.config/vite-plus`      | `%APPDATA%\vite-plus`            |
+| State     | `~/.local/state/vite-plus` | `%LOCALAPPDATA%\vite-plus\state` |
+
+On macOS and Linux, absolute `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_CONFIG_HOME`, and `XDG_STATE_HOME` values override the corresponding base directories. The bin directory follows the data directory.
+
+Low-priority managed shims live in `<DATA>/fallback-bin`, where `<DATA>` is the resolved data directory.
 
 #### `VP_BIN_DIR` / `VP_DATA_DIR` / `VP_CACHE_DIR`
 
@@ -143,6 +154,17 @@ These variables control the installer scripts and the standalone Windows install
 - **Purpose**: Custom npm registry URL
 - **Default**: `https://registry.npmjs.org`
 - **CLI equivalent**: `--registry`
+- **Managed package managers**: When Vite+ downloads a pinned npm, pnpm,
+  Yarn, or Bun version, it also reads the workspace-root and user `.npmrc`.
+  Package-scoped registries and registry-scoped `_authToken`, `_auth`, or
+  `username`/`_password` credentials are honored. Keep secrets in environment
+  variables and reference them from `.npmrc`, for example:
+
+  ```ini
+  registry=https://npm.corp.example/repository/npm/
+  //npm.corp.example/repository/npm/:_authToken=${NPM_TOKEN}
+  ```
+
 - **Example**:
   ```bash
   curl -fsSL https://vite.plus | NPM_CONFIG_REGISTRY=https://registry.npmmirror.com bash
@@ -380,6 +402,10 @@ vp dlx create-vite   # Download and run a package binary
 ```
 
 You do not need a local `vite-plus` dependency to run existing `package.json` scripts. Add the [project-local CLI](/guide/local-cli) when you want the frontend toolchain version recorded in the project's manifest and lockfile.
+
+## Run a Command in Another Directory
+
+Use `vp -C <dir> <command>` to run any `vp` command from another working directory. See [Targeting a package with `-C`](/guide/monorepo#targeting-a-package-with-c) for examples and details.
 
 ## Use Both CLIs Together
 
