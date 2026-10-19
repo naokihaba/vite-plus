@@ -353,6 +353,8 @@ Use Nushell 0.112.1 or later. In Nushell, a custom command or alias can have the
 
 `vp env setup` checks the `nu` on `PATH`. With an earlier Nushell, it writes `env.nu` without the sigil. That `env.nu` still works, but a custom command with the name of a built-in command can stop Nushell at startup with `nu::parser::extra_positional` or a similar parse error. After you upgrade Nushell, run `vp env setup` again.
 
+If you have more than one Nushell installation, make sure that the `nu` on `PATH` during `vp env setup` is the Nushell that you start. A Nushell earlier than 0.112.1 cannot parse an `env.nu` that `vp env setup` wrote for a later version.
+
 #### `CI`
 
 - **Purpose**: Indicates running in CI environment
