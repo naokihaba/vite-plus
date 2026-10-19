@@ -46,8 +46,12 @@ enum EnvShell {
 const UTF8_BOM: char = '\u{feff}';
 
 /// First Nushell release with the `%` sigil, which calls a built-in even when a
-/// user command or alias has the same name.
+/// user command or alias has the same name. See "No more shadows, call internals
+/// with %" in <https://www.nushell.sh/blog/2026-04-11-nushell_v0_112_1.html>.
 const NU_BUILTIN_SIGIL_VERSION: &str = "0.112.1";
+
+/// Maximum time to wait for `nu` to print its version.
+const NU_VERSION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// Nushell syntax that the generated `env.nu` uses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,7 +75,7 @@ impl NuSyntax {
     }
 
     /// Detect the syntax from `VP_NU_VERSION`, or else from the `nu` on `PATH`.
-    /// When `nu` is not installed, use `Legacy`.
+    /// When `nu` is not installed, fails, or does not answer in time, use `Legacy`.
     async fn detect(config: &vp_shared::EnvConfig) -> Self {
         if let Some(version) = &config.nu_version {
             return Self::for_version(version);
@@ -85,9 +89,11 @@ impl NuSyntax {
             .args(["-c", "version | get version"])
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null());
-        match command.output().await {
-            Ok(result) if result.status.success() => {
+            .stderr(std::process::Stdio::null())
+            .kill_on_drop(true);
+        // A `nu` that does not answer must not stop `vp env setup`.
+        match tokio::time::timeout(NU_VERSION_TIMEOUT, command.output()).await {
+            Ok(Ok(result)) if result.status.success() => {
                 Self::for_version(&String::from_utf8_lossy(&result.stdout))
             }
             _ => Self::Legacy,
