@@ -83,10 +83,10 @@ impl NuSyntax {
         let Ok(cwd) = vt_path::current_dir() else { return Self::Legacy };
         let Ok(nu) = vp_command::resolve_bin("nu", None, &cwd) else { return Self::Legacy };
         let mut command = vp_command::build_command(&nu, &cwd);
-        // `-c` does not load the user's config or autoload files, so a broken
-        // env.nu or a user `def version` cannot affect the result.
+        // `--version` exits before the engine starts, so the user's config,
+        // autoload files, and plugins cannot affect the result.
         command
-            .args(["-c", "version | get version"])
+            .arg("--version")
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
