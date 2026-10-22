@@ -224,9 +224,12 @@ function gitConfigLocalMissing(key: string): boolean {
   return spawnSync('git', ['config', '--local', '--get-all', key]).status === 1;
 }
 
-// `git config` exits with 255 (CONFIG_NO_LOCK) when it cannot take `config.lock`.
+// `git config` exits with CONFIG_NO_LOCK (-1) when it cannot take `config.lock`.
 // https://github.com/git/git/blob/47fdf2208c5b94c8cc01c106b8f7c85efb91c926/config.h#L30-L31
-const GIT_CONFIG_LOCK_STATUS = 255;
+// Git 2.37+ keeps the low 8 bits on every platform, so -1 becomes 255. Older Git for
+// Windows can keep the full 32-bit value.
+// https://github.com/git/git/blob/47fdf2208c5b94c8cc01c106b8f7c85efb91c926/common-exit.c#L14-L20
+const GIT_CONFIG_LOCK_STATUSES: ReadonlySet<number | null> = new Set([255, 0xffffffff]);
 
 // Git 2.56+ retries the lock for `core.configLockTimeout` (1s by default) and older Git
 // does not retry. Turn off the Git retry so the wait below is the same on every version.
@@ -251,7 +254,7 @@ function writeGitConfig(
   const gitArgs = [...GIT_CONFIG_NO_LOCK_RETRY, ...args];
   let result = spawnSync('git', gitArgs);
   for (const delay of GIT_CONFIG_LOCK_RETRY_DELAYS_MS) {
-    if (result.status !== GIT_CONFIG_LOCK_STATUS) {
+    if (!GIT_CONFIG_LOCK_STATUSES.has(result.status)) {
       break;
     }
     sleepSync(delay);
