@@ -254,7 +254,7 @@ def --env --wrapped vp [...args: string@"nu-complete vp"] {
 # completions" in https://www.nushell.sh/blog/2026-09-26-nushell_v0_116_0.html#unified-custom-completions
 # `place` is `any` because it is an int or a record. `oneof<int, record>` needs Nushell 0.105+,
 # and every Nushell release must parse the legacy env.nu.
-def "nu-complete vp current-command" [buffer: string, place?: any] {
+def "nu-complete vp current-command" [buffer: string, place: any] {
     if (($place | %describe) starts-with "record") { $place.command | %str join ' ' } else { $buffer }
 }
 # Fish gets the command as an argument, so quotes in it cannot end a fish string.
@@ -269,11 +269,11 @@ def "nu-complete vp fish" [command: string] {
         } else {$value}
     }
 }
-def "nu-complete vp" [buffer: string, place?: any] {
+def "nu-complete vp" [buffer: string, place: any] {
     nu-complete vp fish (nu-complete vp current-command $buffer $place)
 }
 # Completion logic for vpr (translates context to 'vp run ...')
-def "nu-complete vpr" [buffer: string, place?: any] {
+def "nu-complete vpr" [buffer: string, place: any] {
     let context = nu-complete vp current-command $buffer $place
     let modified_context = if ($context =~ '^vpr(?<cwd>\s+-C\s+(?:"[^"]*"|\x27[^\x27]*\x27|\S+))\s') {
         $context | %str replace -r '^vpr(?<cwd>\s+-C\s+(?:"[^"]*"|\x27[^\x27]*\x27|\S+))\s' 'vp$cwd run '

@@ -40,7 +40,6 @@ for index in [4 5] {
 let legacy_script = "source env.nu
 [
   (nu-complete vp 'vp en' 5 | get value)
-  (nu-complete vp 'vp en' | get value)
   (nu-complete vpr 'vpr ' 4 | get value)
 ] | to json --raw"
 let legacy_result = ^$nu.current-exe -n -c $legacy_script | complete
@@ -49,7 +48,7 @@ if $legacy_result.exit_code != 0 {
 }
 
 let legacy = $legacy_result.stdout | from json
-for pair in [[0 0] [1 0] [2 3]] {
+for pair in [[0 0] [1 3]] {
   let expected = $completions | get $pair.1 | each {|value| $value | str trim } | sort
   let got = $legacy | get $pair.0 | each {|value| $value | str trim } | sort
   if $got != $expected {
