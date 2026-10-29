@@ -33,4 +33,28 @@ for index in [4 5] {
   }
 }
 
+# Nushell 0.115 and earlier pass the current command and the cursor position by position.
+# CI has only a newer Nushell, so call the completers in that form directly.
+# An empty command makes fish list every command, which also includes `env`, so compare
+# each result with the completion of the same line above.
+let legacy_script = "source env.nu
+[
+  (nu-complete vp 'vp en' 5 | get value)
+  (nu-complete vp 'vp en' | get value)
+  (nu-complete vpr 'vpr ' 4 | get value)
+] | to json --raw"
+let legacy_result = ^$nu.current-exe -n -c $legacy_script | complete
+if $legacy_result.exit_code != 0 {
+  error make { msg: $"legacy completion failed: ($legacy_result.stderr)" }
+}
+
+let legacy = $legacy_result.stdout | from json
+for pair in [[0 0] [1 0] [2 3]] {
+  let expected = $completions | get $pair.1 | each {|value| $value | str trim } | sort
+  let got = $legacy | get $pair.0 | each {|value| $value | str trim } | sort
+  if $got != $expected {
+    error make { msg: $"legacy `($lines | get $pair.1)` completed differently, got: ($got)" }
+  }
+}
+
 print "Nushell completer checks passed"
