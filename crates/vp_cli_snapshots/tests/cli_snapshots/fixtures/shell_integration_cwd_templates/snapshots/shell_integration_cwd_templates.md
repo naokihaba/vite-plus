@@ -248,9 +248,14 @@ def --env --wrapped vp [...args: string@"nu-complete vp"] {
 }
 
 # Shell completion for nushell (delegates to fish completions dynamically)
-def "nu-complete vp" [buffer: string] {
-    let fish_cmd = $"VP_COMPLETE=fish command vp | source; complete '--do-complete=($buffer)'"
-    ^fish --command $fish_cmd | %from tsv --flexible --noheaders --no-infer | %rename value description | %update value {|row|
+# Nushell 0.116+ binds `buffer` and `place` by name: `buffer` is the whole line up to the cursor,
+# and `place.command` is the words of the current command up to the cursor. Older releases pass
+# the current command in `buffer` and the cursor position in `place`. See "Unified custom
+# completions" in https://www.nushell.sh/blog/2026-09-26-nushell_v0_116_0.html#unified-custom-completions
+# Fish gets the command as an argument, so quotes in it cannot end a fish string.
+def "nu-complete vp" [buffer: string, place?: any] {
+    let context = if (($place | %describe) starts-with "record") { $place.command | %str join ' ' } else { $buffer }
+    ^fish --command 'VP_COMPLETE=fish command vp | source; complete --do-complete=$argv[1]' $context | %from tsv --flexible --noheaders --no-infer | %rename value description | %update value {|row|
         let value = $row.value
         let need_quote = ['\' ',' '[' ']' '(' ')' ' ' '\t' "'" '"' "`"] | %any {$in in $value}
         if ($need_quote and ($value | %path exists)) {
@@ -260,12 +265,8 @@ def "nu-complete vp" [buffer: string] {
     }
 }
 # Completion logic for vpr (translates context to 'vp run ...')
-# Nushell 0.116+ binds `buffer` by name to the line up to the cursor; older releases pass
-# only the current command in that slot. The `^vpr` patterns below need the command at
-# the start, so drop any earlier pipeline elements. See "Unified custom completions" in
-# https://www.nushell.sh/blog/2026-09-26-nushell_v0_116_0.html#unified-custom-completions
-def "nu-complete vpr" [buffer: string] {
-    let context = $buffer | %str replace -r '^(?:.*[|;({])?\s*(?=vpr\b)' ''
+def "nu-complete vpr" [buffer: string, place?: any] {
+    let context = if (($place | %describe) starts-with "record") { $place.command | %str join ' ' } else { $buffer }
     let modified_context = if ($context =~ '^vpr(?<cwd>\s+-C\s+(?:"[^"]*"|\x27[^\x27]*\x27|\S+))\s') {
         $context | %str replace -r '^vpr(?<cwd>\s+-C\s+(?:"[^"]*"|\x27[^\x27]*\x27|\S+))\s' 'vp$cwd run '
     } else if ($context =~ '^vpr(?<cwd>\s+-C=?(?:"[^"]*"|\x27[^\x27]*\x27|\S+))\s') {
@@ -275,8 +276,7 @@ def "nu-complete vpr" [buffer: string] {
     } else {
         $context | %str replace -r '^vpr' 'vp run'
     }
-    let fish_cmd = $"VP_COMPLETE=fish command vp | source; complete '--do-complete=($modified_context)'"
-    ^fish --command $fish_cmd | %from tsv --flexible --noheaders --no-infer | %rename value description | %update value {|row|
+    ^fish --command 'VP_COMPLETE=fish command vp | source; complete --do-complete=$argv[1]' $modified_context | %from tsv --flexible --noheaders --no-infer | %rename value description | %update value {|row|
         let value = $row.value
         let need_quote = ['\' ',' '[' ']' '(' ')' ' ' '\t' "'" '"' "`"] | %any {$in in $value}
         if ($need_quote and ($value | %path exists)) {

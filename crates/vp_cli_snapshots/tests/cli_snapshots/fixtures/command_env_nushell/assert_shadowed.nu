@@ -18,6 +18,8 @@ def prepend [] { }
 def append [] { }
 def "str starts-with" [] { }
 def "str replace" [] { }
+def "str join" [] { }
+def describe [] { }
 def "path expand" [] { }
 def "path exists" [] { }
 def "from tsv" [] { }
