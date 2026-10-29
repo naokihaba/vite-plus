@@ -248,8 +248,8 @@ def --env --wrapped vp [...args: string@"nu-complete vp"] {
 }
 
 # Shell completion for nushell (delegates to fish completions dynamically)
-def "nu-complete vp" [context: string] {
-    let fish_cmd = $"VP_COMPLETE=fish command vp | source; complete '--do-complete=($context)'"
+def "nu-complete vp" [buffer: string] {
+    let fish_cmd = $"VP_COMPLETE=fish command vp | source; complete '--do-complete=($buffer)'"
     ^fish --command $fish_cmd | %from tsv --flexible --noheaders --no-infer | %rename value description | %update value {|row|
         let value = $row.value
         let need_quote = ['\' ',' '[' ']' '(' ')' ' ' '\t' "'" '"' "`"] | %any {$in in $value}
@@ -260,7 +260,12 @@ def "nu-complete vp" [context: string] {
     }
 }
 # Completion logic for vpr (translates context to 'vp run ...')
-def "nu-complete vpr" [context: string] {
+# Nushell 0.116+ binds `buffer` by name to the line up to the cursor; older releases pass
+# only the current command in that slot. The `^vpr` patterns below need the command at
+# the start, so drop any earlier pipeline elements. See "Unified custom completions" in
+# https://www.nushell.sh/blog/2026-09-26-nushell_v0_116_0.html#unified-custom-completions
+def "nu-complete vpr" [buffer: string] {
+    let context = $buffer | %str replace -r '^(?:.*[|;({])?\s*(?=vpr\b)' ''
     let modified_context = if ($context =~ '^vpr(?<cwd>\s+-C\s+(?:"[^"]*"|\x27[^\x27]*\x27|\S+))\s') {
         $context | %str replace -r '^vpr(?<cwd>\s+-C\s+(?:"[^"]*"|\x27[^\x27]*\x27|\S+))\s' 'vp$cwd run '
     } else if ($context =~ '^vpr(?<cwd>\s+-C=?(?:"[^"]*"|\x27[^\x27]*\x27|\S+))\s') {
